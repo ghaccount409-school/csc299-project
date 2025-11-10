@@ -1,3 +1,5 @@
+
+**Guide for formatting:**
 **# Prompt Journal**
 
 **## New Chat(include date and main prompt)**
