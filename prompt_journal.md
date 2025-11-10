@@ -1,14 +1,14 @@
-# Prompt Journal
+**# Prompt Journal**
 
-## New Chat(include date and main prompt)
+**## New Chat(include date and main prompt)**
 
-### User(your input)
+**### User(your input)**
 
-Create a Python program to sum a list.
+**Create a Python program to sum a list.**
 
-### Assistant(AI output)
+**### Assistant(AI output)**
 
-...here is the response...
+**...here is the response...**
 
-### User ...
-...
+**### User ...**
+**...**
