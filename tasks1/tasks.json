@@ -1,0 +1,12 @@
+[
+  {
+    "id": "d3e0d45c4f33404f8427ab6e4a690078",
+    "title": "Buy milk",
+    "notes": "2 litres",
+    "created_at": "2025-11-11T00:50:24.581809Z",
+    "due": "tomorrow",
+    "tags": [
+      "home"
+    ]
+  }
+]
