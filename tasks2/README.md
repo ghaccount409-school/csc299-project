@@ -41,6 +41,12 @@ python prototype_pkms.py add "Buy milk" --id groceries --notes "2 litres"
 python prototype_pkms.py add "Study" --id study-math
 ```
 
+You can also mark a task as important when adding it with --important:
+
+```powershell
+python prototype_pkms.py add "Pay taxes" --important
+```
+
 Custom IDs must be unique; attempting to reuse an ID will fail with an error.
 
 ### List tasks
@@ -88,6 +94,26 @@ Tags:
   urgent: 1 task(s)
 ```
 
+### Important tasks
+
+You can list tasks that have been marked important with the `important` command:
+
+```powershell
+python prototype_pkms.py important
+```
+
+You can also mark or unmark a specific task as important by ID:
+
+```powershell
+# mark by id
+python prototype_pkms.py mark-important <task-id>
+
+# unmark by id
+python prototype_pkms.py unmark-important <task-id>
+```
+
+When a task is displayed and marked important the listing will include the label `Important:` printed in yellow (ANSI). On terminals that do not support ANSI colors you will still see the word "Important:" but without color.
+
 ### Search by tags
 
 ```powershell
@@ -117,7 +143,8 @@ Tasks are stored as a JSON array where each task is an object like:
   "created_at": "2025-11-15 14:23:01 UTC",
   "due": "2025-11-11",
   "tags": ["home", "shopping"],
-  "links": ["xyz1mnop"]
+  "links": ["xyz1mnop"],
+  "important": true
 }
 ```
 
@@ -164,7 +191,9 @@ If you see import errors like `Import "prototype_pkms" could not be resolved`, m
 - Tags: Tasks support multiple tags. Use `tags` to list all tags, and `search-tags` to find tasks by tag(s) with AND/OR logic.
 - Linking: Tasks can be linked to create relationships. When displaying a task, linked tasks are shown with commands to view them.
 - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
-- Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task relationships beyond simple links, and CLI history/autocomplete.
+- Important flag: Tasks can be marked important (`important` field). Use `--important` when adding or the `mark-important` / `unmark-important` commands to toggle. Important tasks are highlighted when displayed.
+ - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
+- Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task relationships beyond simple links, and interactive mode features.
 
 ## License / attribution
 

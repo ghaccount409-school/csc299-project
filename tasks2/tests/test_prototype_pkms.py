@@ -3,8 +3,14 @@ import tempfile
 import os
 import json
 from datetime import datetime
+import sys
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags
+# Ensure the tasks2 directory is on sys.path so tests can import prototype_pkms
+TEST_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if TEST_ROOT not in sys.path:
+    sys.path.insert(0, TEST_ROOT)
+
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important
 import io
 import contextlib
 import re
@@ -165,6 +171,40 @@ class TestTaskCLI(unittest.TestCase):
         self.assertEqual(tag_counts["shopping"], 1)
         # Verify tags are sorted alphabetically
         self.assertEqual(list(tag_counts.keys()), sorted(tag_counts.keys()))
+
+    def test_mark_important_and_list(self):
+        t = add_task("Very important", important=True, path=self.datafile)
+        self.assertTrue(t.important)
+
+        important = list_important_tasks(path=self.datafile)
+        self.assertEqual(len(important), 1)
+        self.assertEqual(important[0].id, t.id)
+
+        # pretty_print should include the label 'Important' when printing
+        tasks = list_tasks(path=self.datafile)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            pretty_print(tasks)
+        out = buf.getvalue()
+        self.assertIn("Important", out)
+
+    def test_mark_and_unmark_commands(self):
+        # Create a non-important task
+        t = add_task("Not yet important", path=self.datafile)
+        self.assertFalse(getattr(t, 'important', False))
+
+        # Mark it important using helper
+        ok = mark_important(t.id, path=self.datafile)
+        self.assertTrue(ok)
+        tasks = list_important_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].id, t.id)
+
+        # Unmark it
+        ok2 = unmark_important(t.id, path=self.datafile)
+        self.assertTrue(ok2)
+        tasks_after = list_important_tasks(path=self.datafile)
+        self.assertEqual(len(tasks_after), 0)
 
 
 if __name__ == "__main__":

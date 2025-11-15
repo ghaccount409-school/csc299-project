@@ -5,6 +5,10 @@ Commands:
   add    - add a task
   list   - list tasks
   search - search tasks by keyword
+  tags   - list all tags
+  search-tags - search by tags
+  show   - show a task
+  link   - link tasks
 
 Data file (default): tasks.json next to this script
 """
@@ -19,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+
 DEFAULT_FILENAME = "tasks.json"
 
 
@@ -31,6 +36,7 @@ class Task:
     due: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     links: List[str] = field(default_factory=list)
+    important: bool = False
 
 
 def data_file_path(path: Optional[str] = None) -> Path:
@@ -77,7 +83,7 @@ def task_id_exists(task_id: str, path: Optional[str] = None) -> bool:
     return any(t.id == task_id for t in tasks)
 
 
-def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, custom_id: Optional[str] = None, path: Optional[str] = None) -> Optional[Task]:
+def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, custom_id: Optional[str] = None, important: bool = False, path: Optional[str] = None) -> Optional[Task]:
     tasks = load_tasks(path)
     
     # Determine task ID
@@ -98,6 +104,7 @@ def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None,
         due=due,
         tags=tags or [],
         links=[],
+        important=important,
     )
     tasks.append(new)
     save_tasks(tasks, path)
@@ -131,7 +138,11 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
         print(f"Task {task_id} not found.")
         return None
     # print single task in same format as pretty_print
-    print(f"- [{t.id}] {t.title}")
+    if getattr(t, 'important', False):
+        prefix = "\033[93mImportant:\033[0m "
+    else:
+        prefix = ""
+    print(f"- {prefix}[{t.id}] {t.title}")
     if t.notes:
         print(f"    Notes: {t.notes}")
     if t.due:
@@ -188,12 +199,46 @@ def list_all_tags(path: Optional[str] = None) -> dict:
     return dict(sorted(tag_counts.items()))
 
 
+def list_important_tasks(path: Optional[str] = None) -> List[Task]:
+    """Return tasks marked as important."""
+    tasks = load_tasks(path)
+    return [t for t in tasks if getattr(t, 'important', False)]
+
+
+def mark_important(task_id: str, path: Optional[str] = None) -> bool:
+    """Mark a task as important. Returns True if changed, False if not found."""
+    tasks = load_tasks(path)
+    t = find_task(task_id, tasks)
+    if t is None:
+        return False
+    if not getattr(t, 'important', False):
+        t.important = True
+        save_tasks(tasks, path)
+    return True
+
+
+def unmark_important(task_id: str, path: Optional[str] = None) -> bool:
+    """Unmark a task as important. Returns True if changed, False if not found."""
+    tasks = load_tasks(path)
+    t = find_task(task_id, tasks)
+    if t is None:
+        return False
+    if getattr(t, 'important', False):
+        t.important = False
+        save_tasks(tasks, path)
+    return True
+
+
 def pretty_print(tasks: List[Task]) -> None:
     if not tasks:
         print("No tasks.")
         return
     for t in tasks:
-        print(f"- [{t.id}] {t.title}")
+        if getattr(t, 'important', False):
+            prefix = "\033[93mImportant:\033[0m "
+        else:
+            prefix = ""
+        print(f"- {prefix}[{t.id}] {t.title}")
         if t.notes:
             print(f"    Notes: {t.notes}")
         if t.due:
@@ -208,7 +253,8 @@ def pretty_print(tasks: List[Task]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="taskmgr", description="Simple JSON-backed task manager (stored in prototype_pkms.py)")
+    # Use the actual script filename as the program name in help/usage
+    parser = argparse.ArgumentParser(prog=Path(__file__).name, description="Simple JSON-backed task manager (stored in prototype_pkms.py)")
     parser.add_argument("--data", help="Path to JSON data file (defaults to tasks.json next to script)")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -218,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--due", help="Optional due date (string)")
     p_add.add_argument("--tag", action="append", help="Tag (repeatable)")
     p_add.add_argument("--id", dest="custom_id", help="Optional custom task ID (must be unique). If omitted, a short ID is generated.")
+    p_add.add_argument("--important", action="store_true", help="Mark task as important")
 
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument("--tag", help="Filter by tag")
@@ -238,6 +285,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_search_tags.add_argument("tag", nargs="+", help="Tag(s) to search for")
     p_search_tags.add_argument("--all", action="store_true", help="Match tasks with ALL specified tags (default: ANY)")
 
+    p_important = sub.add_parser("important", help="List tasks marked as important")
+
+    p_mark = sub.add_parser("mark-important", help="Mark a task as important")
+    p_mark.add_argument("task_id", help="ID of task to mark important")
+
+    p_unmark = sub.add_parser("unmark-important", help="Unmark a task as important")
+    p_unmark.add_argument("task_id", help="ID of task to unmark as important")
+
     return parser
 
 
@@ -252,7 +307,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     data_path = args.data
 
     if args.cmd == "add":
-        t = add_task(args.title, notes=args.notes, due=args.due, tags=args.tag, custom_id=args.custom_id, path=data_path)
+        t = add_task(args.title, notes=args.notes, due=args.due, tags=args.tag, custom_id=args.custom_id, important=getattr(args, 'important', False), path=data_path)
         if t is None:
             return 2
         print(f"Added task {t.id}")
@@ -301,6 +356,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print(f"No tasks found with {('all' if match_all else 'any')} of: {', '.join(args.tag)}")
         return 0
+
+    if args.cmd == "important":
+        tasks = list_important_tasks(path=data_path)
+        pretty_print(tasks)
+        return 0
+
+    if args.cmd == "mark-important":
+        ok = mark_important(args.task_id, path=data_path)
+        if ok:
+            print(f"Marked {args.task_id} as important")
+            return 0
+        else:
+            print(f"Task {args.task_id} not found")
+            return 2
+
+    if args.cmd == "unmark-important":
+        ok = unmark_important(args.task_id, path=data_path)
+        if ok:
+            print(f"Unmarked {args.task_id} as important")
+            return 0
+        else:
+            print(f"Task {args.task_id} not found")
+            return 2
 
     parser.print_help()
     return 2

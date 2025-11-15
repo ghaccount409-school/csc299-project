@@ -625,3 +625,123 @@ All existing functionality remains intact. The new tag commands make it much eas
 
 Claude Haiku 4.5 • 1x
 
+### User(your input)
+
+Add an option to mark tasks as important. When displaying tasks marked as important, put "Important:" highlighted yellow in front of the task ID and title. Add command to list out tasks marked as important
+
+### Assistant(AI output)
+
+Done — I added the "important" feature and updated tests.
+
+What I changed
+
+Code (prototype_pkms.py)
+
+Added Task.important: bool = False
+add_task now accepts important: bool and stores it on creation
+pretty_print and show_task now prefix important tasks with "Important:" (ANSI yellow highlight: \033[93mImportant:\033[0m)
+Added CLI --important flag to add subcommand
+Added important subcommand to list tasks marked important
+Added helper function list_important_tasks(path) returning important tasks
+Ensured add path/main passes args.important into add_task
+Tests (test_prototype_pkms.py)
+
+Inserted test root into sys.path so tests import prototype_pkms correctly
+Imported list_important_tasks
+Added test test_mark_important_and_list verifying:
+add_task(..., important=True) sets the flag
+list_important_tasks returns the task
+pretty_print output contains 'Important'
+Progress update
+
+Todo items 1-3 are completed (test file opened, imports updated, tests adjusted).
+Remaining: Run tests locally (I can't run them in your environment). Next step would be running the test suite and fixing any environment-specific issues.
+How to test locally (PowerShell)
+
+Run the module help to see the new option:
+You should see the --important flag under add and an important subcommand.
+
+Try adding and listing an important task:
+The listed task should show an "Important:" label in yellow before the ID/title (your terminal must support ANSI colors to see the highlighting).
+
+Run unit tests from repo root:
+Notes and edge cases
+
+Existing data files without the important field still load fine because the dataclass default is False.
+The "Important:" label uses ANSI escape sequences; Windows PowerShell 5.1 may not display colors unless VT processing is enabled. The label text ("Important") will still appear (possibly with escape codes).
+I didn't add commands to toggle importance after creation (e.g., mark/unmark). I can add them if you want.
+Would you like me to:
+
+Add mark-important / unmark-important commands?
+Add a test for the CLI subcommand important (currently tests the function-level behavior)?
+Run further checks (lint/tests) if I should attempt them here?
+
+### User(your input)
+
+Add mark-important / unmark-important commands
+
+### Assistant(AI output)
+
+Done — I added mark/unmark-important and updated tests.
+
+Summary of changes
+
+prototype_pkms.py
+Task dataclass: added field important: bool = False.
+add_task: accepts important parameter and stores it.
+pretty_print and show_task: show an "Important:" prefix (ANSI yellow) when task.important is True.
+New helpers:
+list_important_tasks(path) -> List[Task]
+mark_important(task_id, path) -> bool
+unmark_important(task_id, path) -> bool
+CLI:
+--important flag for add
+new subcommands:
+important — list important tasks
+mark-important <task_id> — mark a task important
+unmark-important <task_id> — unmark a task
+test_prototype_pkms.py
+Updated imports to include new helpers.
+Added tests:
+test_mark_important_and_list (already added earlier) verifies add with important and listing
+test_mark_and_unmark_commands verifies mark_important and unmark_important helper functions and their effects
+Progress update
+
+All requested code changes and test updates are complete (todo list updated).
+I couldn't run the tests in your environment from here; the editor's lint shows an import resolution warning (IDE/static analysis). That typically doesn't stop tests if run from the repo root because the test file inserts the tasks2 path into sys.path.
+How you can verify locally (PowerShell)
+
+Show help and confirm new subcommands:
+
+cd C:\Users\nigel\csc299-project\tasks2python prototype_pkms.py -h
+You should see:
+
+--important under add
+subcommands important, mark-important, unmark-important
+Quick manual test:
+
+#### add task without important
+python prototype_pkms.py add "Normal task"
+#### add important task
+python prototype_pkms.py add "Urgent task" --important
+#### list important
+python prototype_pkms.py important
+#### mark a task important (replace <id> with the ID printed when adding)
+python prototype_pkms.py mark-important <id>
+#### unmark
+python prototype_pkms.py unmark-important <id>
+
+Run unit tests from repo root:
+
+cd C:\Users\nigel\csc299-projectpython -m unittest discover -v
+Notes and caveats
+
+The "Important:" label uses ANSI escape codes for yellow. On Windows PowerShell 5.1 you may see escape sequences unless VT processing is enabled; the label text will still appear.
+Tests use function helpers mark_important and unmark_important rather than invoking CLI subprocesses — this keeps tests fast and deterministic.
+If you'd like CLI-level integration tests (invoking the script), I can add them, but they require careful subprocess handling.
+Next steps (if you want)
+
+Add CLI integration tests that call the script via subprocess and verify stdout.
+Add mark-important/unmark-important to the README with usage examples.
+Add commands to toggle importance by title or to mark/unmark multiple tasks at once.
+Would you like me to add README entries or CLI integration tests next?
