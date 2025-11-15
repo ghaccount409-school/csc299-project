@@ -30,6 +30,7 @@ class Task:
     created_at: str
     due: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    links: List[str] = field(default_factory=list)
 
 
 def data_file_path(path: Optional[str] = None) -> Path:
@@ -74,10 +75,53 @@ def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None,
         created_at=datetime.utcnow().isoformat() + "Z",
         due=due,
         tags=tags or [],
+        links=[],
     )
     tasks.append(new)
     save_tasks(tasks, path)
     return new
+
+
+def find_task(task_id: str, tasks: List[Task]) -> Optional[Task]:
+    for t in tasks:
+        if t.id == task_id:
+            return t
+    return None
+
+
+def add_link(source_id: str, target_id: str, path: Optional[str] = None) -> bool:
+    """Link target task to source task. Returns True on success, False if either task missing."""
+    tasks = load_tasks(path)
+    src = find_task(source_id, tasks)
+    tgt = find_task(target_id, tasks)
+    if src is None or tgt is None:
+        return False
+    if target_id not in src.links:
+        src.links.append(target_id)
+        save_tasks(tasks, path)
+    return True
+
+
+def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
+    tasks = load_tasks(path)
+    t = find_task(task_id, tasks)
+    if t is None:
+        print(f"Task {task_id} not found.")
+        return None
+    # print single task in same format as pretty_print
+    print(f"- [{t.id}] {t.title}")
+    if t.notes:
+        print(f"    Notes: {t.notes}")
+    if t.due:
+        print(f"    Due: {t.due}")
+    if t.tags:
+        print(f"    Tags: {', '.join(t.tags)}")
+    print(f"    Created: {t.created_at}")
+    if t.links:
+        print("    Linked tasks:")
+        for lid in t.links:
+            print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
+    return t
 
 
 def list_tasks(path: Optional[str] = None, tag: Optional[str] = None) -> List[Task]:
@@ -106,6 +150,10 @@ def pretty_print(tasks: List[Task]) -> None:
             print(f"    Due: {t.due}")
         if t.tags:
             print(f"    Tags: {', '.join(t.tags)}")
+        if t.links:
+            print("    Linked tasks:")
+            for lid in t.links:
+                print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
         print(f"    Created: {t.created_at}")
 
 
@@ -125,6 +173,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_search = sub.add_parser("search", help="Search tasks by keyword in title or notes")
     p_search.add_argument("query", help="Search query string")
+
+    p_show = sub.add_parser("show", help="Show a single task by id")
+    p_show.add_argument("task_id", help="ID of the task to show")
+
+    p_link = sub.add_parser("link", help="Link one task to another")
+    p_link.add_argument("source_id", help="ID of the task to add link to (source)")
+    p_link.add_argument("target_id", help="ID of the task to link (target)")
 
     return parser
 
@@ -153,6 +208,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         tasks = search_tasks(args.query, path=data_path)
         pretty_print(tasks)
         return 0
+
+    if args.cmd == "show":
+        show_task(args.task_id, path=data_path)
+        return 0
+
+    if args.cmd == "link":
+        ok = add_link(args.source_id, args.target_id, path=data_path)
+        if ok:
+            print(f"Linked {args.target_id} -> {args.source_id}")
+            return 0
+        else:
+            print("One or both task IDs not found.")
+            return 2
 
     parser.print_help()
     return 2

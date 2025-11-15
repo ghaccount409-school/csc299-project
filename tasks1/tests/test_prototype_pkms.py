@@ -4,7 +4,9 @@ import os
 import json
 from datetime import datetime
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print
+import io
+import contextlib
 
 
 class TestTaskCLI(unittest.TestCase):
@@ -79,6 +81,23 @@ class TestTaskCLI(unittest.TestCase):
         self.assertTrue(created.endswith("Z"))
         # basic parse check (without timezone)
         datetime.fromisoformat(created.rstrip("Z"))
+
+    def test_linking_and_show(self):
+        a = add_task("Parent Task", path=self.datafile)
+        b = add_task("Child Task", path=self.datafile)
+        ok = add_link(a.id, b.id, path=self.datafile)
+        self.assertTrue(ok)
+
+        tasks = list_tasks(path=self.datafile)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            pretty_print(tasks)
+        out = buf.getvalue()
+
+        # linked tasks and the view command should appear in the listing for the parent
+        self.assertIn("Linked tasks:", out)
+        self.assertIn(b.id, out)
+        self.assertIn(f"python prototype_pkms.py show {b.id}", out)
 
 
 if __name__ == "__main__":
