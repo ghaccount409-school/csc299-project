@@ -62,7 +62,7 @@ python prototype_pkms.py list --tag shopping
 You can also sort tasks with the `--sort-by` option:
 
 ```powershell
-# Sort by due date (ascending, tasks without due dates go to end)
+# Sort by due date (ascending, tasks without due dates always appear at the end)
 python prototype_pkms.py list --sort-by due
 
 # Sort by creation date (descending/newest first)
@@ -260,7 +260,7 @@ If you see import errors like `Import "prototype_pkms" could not be resolved`, m
 - Linking: Tasks can be linked to create relationships. When displaying a task, linked tasks are shown with commands to view them.
 - Subtasks: Organize tasks hierarchically by linking existing tasks as subtasks. Both parent and subtask must be existing tasks. Parent tasks display a count of subtasks with a hint to view them. The same task can be a subtask of multiple parents.
 - Important flag: Tasks can be marked important (`important` field). Use `--important` when adding or the `mark-important` / `unmark-important` commands to toggle. Important tasks are highlighted when displayed.
-- Sorting: The `list` command supports sorting by due date, creation time, title, or task ID with optional reverse order. When sorting by due date, tasks without a due date are placed at the end.
+- Sorting: The `list` command supports sorting by due date, creation time, title, or task ID with optional reverse order. When sorting by due date, tasks without a due date are placed at the end (they remain at the end even when using `--reverse`).
 - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`, `add_subtask`, `show_subtasks`) so it can be imported and used programmatically.
 - Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task completion tracking, and interactive mode features.
 

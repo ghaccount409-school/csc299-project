@@ -1059,9 +1059,115 @@ test_add_subtask_nonexistent_subtask - Error handling
 test_show_subtasks - Verify retrieval
 test_show_subtasks_empty - Empty list handling
 test_link_same_subtask_twice - Duplicate prevention
+
 Documentation Updated:
 README examples show creating tasks first, then linking
 Clarified that both tasks must exist
 Updated development notes
 Test coverage updated
 The implementation is now much cleaner and more focused on its single responsibility: linking existing tasks hierarchically.
+
+### User(your input)
+
+I recieved this error: FAIL: test_sort_by_due (tests.test_prototype_pkms.TestTaskCLI.test_sort_by_due)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "\csc299-project\tasks2\tests\test_prototype_pkms.py", line 270, in test_sort_by_due
+    self.assertIsNotNone(sorted_asc[0].due)
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 29 tests in 1.972s
+
+FAILED (failures=1)
+- [842f829d] Parent task
+    Created: 2025-11-15 22:05:23 UTC
+    Subtasks: 1 subtask(s)
+      To view subtasks: python prototype_pkms.py show-subtasks 842f829d
+Subtasks for [fe386fde] Parent:
+- [ce05b5bc] Subtask 1
+    Created: 2025-11-15 22:05:24 UTC
+- [2f36b75d] Subtask 2
+    Created: 2025-11-15 22:05:24 UTC
+No subtasks for task [8b15bf3a] Parent with no subtasks
+
+### Assistant(AI output)
+
+I need to look at the test_sort_by_due test to understand what's happening. The issue is that the test expects the first item in the sorted list to have a non-None due date, but it's None. This means the sorting isn't working as expected.
+
+Read test_prototype_pkms.py, lines 263 to 283
+
+Now let me check the sort_tasks function to see the sorting logic for due dates:
+
+Searched text for def sort_tasks, 2 results
+Read prototype_pkms.py, lines 262 to 307
+
+I see the issue! The problem is in the sorting key for due dates. The key is (not is_valid_date_format(t.due), t.due or ""). When reverse=False (ascending), this puts tasks with invalid/None dates FIRST (because not True = False, and False sorts before True). The logic is backwards.
+
+Let me fix this:
+
+Using "Replace String in File"
+
+prototype_pkms.py+3-1
+Actually, let me think about this more carefully. The issue is subtle. Let me trace through the logic:
+
+When is_valid_date_format(None) was returning True, the key was (not True, "") = (False, "").
+When is_valid_date_format("2025-11-10") was returning True, the key was (not True, "2025-11-10") = (False, "2025-11-10").
+
+So both valid dates and None dates had the first tuple element as False, making it impossible to distinguish them. That's why I changed is_valid_date_format(None) to return False.
+
+Now:
+
+Valid date: (not True, "2025-11-10") = (False, "2025-11-10")
+None/invalid: (not False, "") = (True, "")
+When sorting in ascending order (reverse=False):
+
+(False, "2025-11-10") sorts before (True, "")
+So valid dates come first ✓
+Within valid dates: they sort by date string ✓
+When sorting in descending order (reverse=True):
+
+Everything is reversed
+(True, "") sorts before (False, "...")
+So None/invalid dates come first... wait, that's wrong!
+We want None/invalid dates to ALWAYS go to the end, regardless of reverse. Let me fix this properly:
+
+Using "Replace String in File"
+
+prototype_pkms.py+18-7
+Perfect! Now the sorting logic is:
+
+For ascending order (reverse=False):
+Valid dates are sorted chronologically first
+Invalid/None dates go to the end
+For descending order (reverse=True):
+
+Valid dates are sorted in reverse chronological order
+Invalid/None dates still go to the end
+This ensures that tasks without due dates always appear at the end, regardless of sort direction.
+
+### User(your input)
+
+update testing and readme to reflect edits if necessary
+
+### Assistant(AI output)
+
+Progress update — what I changed and what's next:
+
+I updated the README in two places to clarify due-date sorting behavior: tasks without a due date always appear at the end, even when using --reverse.
+Next steps (recommended for you):
+Run the single failing test to confirm fix: test_sort_by_due.
+Run the full test suite.
+How to run tests locally (PowerShell):
+
+
+# Run the single failing testpython -m unittest tests.test_prototype_pkms.TestTaskCLI.test_sort_by_due -v# Run the full test suitepython -m unittest discover -v
+Todo updates:
+
+README sorting notes: in-progress → done
+Run tests locally: not-started (please run locally; I can't run them in your environment)
+Verify tests pass: not-started (please run locally and share results; I will iterate if anything else fails)
+If you want, I can also:
+
+Run a quick static check across the repo for other README mentions to update (I already targeted the two spots).
+Add an explicit unit test that checks the order with --reverse to ensure invalid dates remain at the end; I can add that test now if you'd like.

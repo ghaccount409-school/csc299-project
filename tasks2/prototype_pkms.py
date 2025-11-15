@@ -273,7 +273,7 @@ def sort_tasks(tasks: List[Task], sort_by: str = "created", reverse: bool = Fals
     def is_valid_date_format(date_str: Optional[str]) -> bool:
         """Check if date string is in YYYY-MM-DD format."""
         if date_str is None:
-            return True
+            return False
         try:
             from datetime import datetime as dt
             dt.strptime(date_str, "%Y-%m-%d")
@@ -283,11 +283,24 @@ def sort_tasks(tasks: List[Task], sort_by: str = "created", reverse: bool = Fals
     
     if sort_by == "due":
         # Sort by due date; tasks without due date or invalid format go to end
-        sorted_tasks = sorted(
-            tasks, 
-            key=lambda t: (not is_valid_date_format(t.due), t.due or ""), 
-            reverse=reverse
-        )
+        # First sort by valid/invalid, then by date within each group
+        def due_sort_key(t):
+            is_valid = is_valid_date_format(t.due)
+            # Return tuple: (is_invalid, date_or_empty)
+            # Invalid dates will have (True, ""), valid will have (False, "2025-11-10")
+            # When reverse=False: (False, ...) < (True, ...) so valid dates come first
+            # When reverse=True: we reverse the order, but we need to handle this specially
+            return (not is_valid, t.due or "")
+        
+        sorted_tasks = sorted(tasks, key=due_sort_key)
+        # If reverse is True, we need to reverse but keep invalid dates at the end
+        if reverse:
+            # Split into valid and invalid
+            valid = [t for t in sorted_tasks if is_valid_date_format(t.due)]
+            invalid = [t for t in sorted_tasks if not is_valid_date_format(t.due)]
+            # Reverse valid dates, keep invalid at end
+            valid.reverse()
+            sorted_tasks = valid + invalid
     elif sort_by == "created":
         # Sort by created_at timestamp
         sorted_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=reverse)
