@@ -4,9 +4,10 @@ import os
 import json
 from datetime import datetime
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists
 import io
 import contextlib
+import re
 
 
 class TestTaskCLI(unittest.TestCase):
@@ -98,6 +99,40 @@ class TestTaskCLI(unittest.TestCase):
         self.assertIn("Linked tasks:", out)
         self.assertIn(b.id, out)
         self.assertIn(f"python prototype_pkms.py show {b.id}", out)
+
+    def test_short_id_generation(self):
+        # Short IDs should be 8 characters and hex
+        t = add_task("Test short ID", path=self.datafile)
+        self.assertEqual(len(t.id), 8)
+        self.assertTrue(re.match(r'^[0-9a-f]{8}$', t.id))
+
+    def test_multiple_short_ids_are_unique(self):
+        t1 = add_task("Task 1", path=self.datafile)
+        t2 = add_task("Task 2", path=self.datafile)
+        t3 = add_task("Task 3", path=self.datafile)
+        ids = {t1.id, t2.id, t3.id}
+        self.assertEqual(len(ids), 3)
+
+    def test_custom_id_creation(self):
+        t = add_task("Custom task", custom_id="my-task", path=self.datafile)
+        self.assertEqual(t.id, "my-task")
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].id, "my-task")
+
+    def test_duplicate_custom_id_rejected(self):
+        add_task("First task", custom_id="dup-id", path=self.datafile)
+        # Try to add second task with same ID
+        t2 = add_task("Second task", custom_id="dup-id", path=self.datafile)
+        self.assertIsNone(t2)
+        # Only first task should exist
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 1)
+
+    def test_task_id_exists_checker(self):
+        add_task("Existing", custom_id="exists", path=self.datafile)
+        self.assertTrue(task_id_exists("exists", path=self.datafile))
+        self.assertFalse(task_id_exists("nonexistent", path=self.datafile))
 
 
 if __name__ == "__main__":

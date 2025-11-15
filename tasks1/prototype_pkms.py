@@ -66,10 +66,31 @@ def save_tasks(tasks: List[Task], path: Optional[str] = None) -> None:
         json.dump([asdict(t) for t in tasks], f, ensure_ascii=False, indent=2)
 
 
-def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, path: Optional[str] = None) -> Task:
+def generate_short_id() -> str:
+    """Generate a short 8-char task ID."""
+    return uuid.uuid4().hex[:8]
+
+
+def task_id_exists(task_id: str, path: Optional[str] = None) -> bool:
+    """Check if a task ID already exists."""
     tasks = load_tasks(path)
+    return any(t.id == task_id for t in tasks)
+
+
+def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, custom_id: Optional[str] = None, path: Optional[str] = None) -> Optional[Task]:
+    tasks = load_tasks(path)
+    
+    # Determine task ID
+    if custom_id:
+        if task_id_exists(custom_id, path):
+            print(f"Task ID '{custom_id}' already exists. Please choose a different ID.", file=sys.stderr)
+            return None
+        task_id = custom_id
+    else:
+        task_id = generate_short_id()
+    
     new = Task(
-        id=uuid.uuid4().hex,
+        id=task_id,
         title=title,
         notes=notes,
         created_at=datetime.utcnow().isoformat() + "Z",
@@ -167,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--notes", help="Optional notes for the task")
     p_add.add_argument("--due", help="Optional due date (string)")
     p_add.add_argument("--tag", action="append", help="Tag (repeatable)")
+    p_add.add_argument("--id", dest="custom_id", help="Optional custom task ID (must be unique). If omitted, a short ID is generated.")
 
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument("--tag", help="Filter by tag")
@@ -195,7 +217,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     data_path = args.data
 
     if args.cmd == "add":
-        t = add_task(args.title, notes=args.notes, due=args.due, tags=args.tag, path=data_path)
+        t = add_task(args.title, notes=args.notes, due=args.due, tags=args.tag, custom_id=args.custom_id, path=data_path)
+        if t is None:
+            return 2
         print(f"Added task {t.id}")
         return 0
 
