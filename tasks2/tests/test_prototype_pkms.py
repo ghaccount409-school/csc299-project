@@ -10,7 +10,7 @@ TEST_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if TEST_ROOT not in sys.path:
     sys.path.insert(0, TEST_ROOT)
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks, add_subtask, show_subtasks
 import io
 import contextlib
 import re
@@ -270,6 +270,86 @@ class TestTaskCLI(unittest.TestCase):
         self.assertIsNotNone(sorted_asc[0].due)
         self.assertIsNotNone(sorted_asc[1].due)
         self.assertIsNone(sorted_asc[2].due)
+
+    def test_add_subtask(self):
+        parent = add_task("Parent task", path=self.datafile)
+        existing = add_task("Existing task", path=self.datafile)
+        
+        # Link existing task as subtask
+        subtask = add_subtask(parent.id, existing.id, path=self.datafile)
+        
+        # Verify existing task was linked
+        self.assertIsNotNone(subtask)
+        self.assertEqual(subtask.id, existing.id)
+        
+        # Verify parent has subtask reference
+        updated_parent = show_task(parent.id, path=self.datafile)
+        self.assertIn(existing.id, updated_parent.subtasks)
+
+    def test_add_multiple_subtasks(self):
+        parent = add_task("Parent task", path=self.datafile)
+        sub1 = add_task("Subtask 1", path=self.datafile)
+        sub2 = add_task("Subtask 2", path=self.datafile)
+        sub3 = add_task("Subtask 3", path=self.datafile)
+        
+        # Link all as subtasks
+        add_subtask(parent.id, sub1.id, path=self.datafile)
+        add_subtask(parent.id, sub2.id, path=self.datafile)
+        add_subtask(parent.id, sub3.id, path=self.datafile)
+        
+        # Verify all subtasks are linked to parent
+        tasks = load_tasks(path=self.datafile)
+        parent_updated = [t for t in tasks if t.id == parent.id][0]
+        self.assertEqual(len(parent_updated.subtasks), 3)
+        self.assertIn(sub1.id, parent_updated.subtasks)
+        self.assertIn(sub2.id, parent_updated.subtasks)
+        self.assertIn(sub3.id, parent_updated.subtasks)
+
+    def test_add_subtask_to_nonexistent_parent(self):
+        existing = add_task("Existing", path=self.datafile)
+        result = add_subtask("nonexistent", existing.id, path=self.datafile)
+        self.assertIsNone(result)
+
+    def test_add_subtask_nonexistent_subtask(self):
+        parent = add_task("Parent", path=self.datafile)
+        result = add_subtask(parent.id, "nonexistent-task", path=self.datafile)
+        self.assertIsNone(result)
+
+    def test_show_subtasks(self):
+        parent = add_task("Parent", path=self.datafile)
+        sub1 = add_task("Subtask 1", path=self.datafile)
+        sub2 = add_task("Subtask 2", path=self.datafile)
+        
+        # Link both as subtasks
+        add_subtask(parent.id, sub1.id, path=self.datafile)
+        add_subtask(parent.id, sub2.id, path=self.datafile)
+        
+        # show_subtasks should return the subtasks
+        subtasks = show_subtasks(parent.id, path=self.datafile)
+        self.assertEqual(len(subtasks), 2)
+        ids = {s.id for s in subtasks}
+        self.assertEqual(ids, {sub1.id, sub2.id})
+
+    def test_show_subtasks_empty(self):
+        parent = add_task("Parent with no subtasks", path=self.datafile)
+        
+        # show_subtasks on empty parent should return empty list
+        subtasks = show_subtasks(parent.id, path=self.datafile)
+        self.assertEqual(len(subtasks), 0)
+
+    def test_link_same_subtask_twice(self):
+        parent = add_task("Parent", path=self.datafile)
+        existing = add_task("Existing", path=self.datafile)
+        
+        # Link it twice
+        add_subtask(parent.id, existing.id, path=self.datafile)
+        add_subtask(parent.id, existing.id, path=self.datafile)
+        
+        # Should only appear once in subtasks list
+        tasks = load_tasks(path=self.datafile)
+        parent_updated = [t for t in tasks if t.id == parent.id][0]
+        count = parent_updated.subtasks.count(existing.id)
+        self.assertEqual(count, 1)
 
 
 if __name__ == "__main__":

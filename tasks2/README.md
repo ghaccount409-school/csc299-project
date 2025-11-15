@@ -13,7 +13,10 @@ It stores tasks as JSON and supports adding, listing, searching tasks, and linki
 - **Search tasks by tags** with AND/OR logic
 - **List all tags** with counts
 - **Link tasks together** and view linked relationships
-- Show individual task details with linked tasks
+- **Organize tasks hierarchically with subtasks** - add subtasks to parent tasks, or link existing tasks as subtasks
+- Show individual task details with linked tasks and subtask counts
+- **Mark tasks as important** with visual highlighting (yellow) - includes mark/unmark commands
+- **Sort tasks** by due date, creation time, title, or ID with ascending/descending options
 - Human-friendly `created_at` format (YYYY-MM-DD HH:MM:SS UTC)
 - Default JSON data file: `tasks.json` next to `prototype_pkms.py` (override with `--data`)
 
@@ -136,6 +139,42 @@ python prototype_pkms.py unmark-important <task-id>
 
 When a task is displayed and marked important the listing will include the label `Important:` printed in yellow (ANSI). On terminals that do not support ANSI colors you will still see the word "Important:" but without color.
 
+### Subtasks
+
+You can organize tasks hierarchically by linking existing tasks as subtasks to parent tasks:
+
+```powershell
+# Link an existing task as a subtask to a parent task
+python prototype_pkms.py add-subtask <parent-id> <subtask-id>
+
+# View all subtasks for a parent task
+python prototype_pkms.py show-subtasks <parent-id>
+```
+
+When you list or show a parent task that has subtasks, you'll see a hint about how to view them. The `Subtasks:` label is displayed in orange with the count of subtasks.
+
+Example workflow:
+```powershell
+# Create tasks
+python prototype_pkms.py add "Plan project" --id plan-proj
+python prototype_pkms.py add "Research requirements" --id research
+python prototype_pkms.py add "Create proposal" --id proposal
+python prototype_pkms.py add "Schedule meeting" --id schedule
+
+# Link them as subtasks
+python prototype_pkms.py add-subtask plan-proj research
+python prototype_pkms.py add-subtask plan-proj proposal
+python prototype_pkms.py add-subtask plan-proj schedule
+
+# Show the parent task (will display subtask count and hint)
+python prototype_pkms.py show plan-proj
+
+# View all subtasks
+python prototype_pkms.py show-subtasks plan-proj
+```
+
+Only existing tasks can be added as subtasks. Both the parent task and the subtask must already exist.
+
 ### Search by tags
 
 ```powershell
@@ -166,7 +205,8 @@ Tasks are stored as a JSON array where each task is an object like:
   "due": "2025-11-11",
   "tags": ["home", "shopping"],
   "links": ["xyz1mnop"],
-  "important": true
+  "important": true,
+  "subtasks": ["b2c3d4e5", "c3d4e5f6"]
 }
 ```
 
@@ -177,6 +217,8 @@ Tasks are stored as a JSON array where each task is an object like:
 - `due`: Optional due date
 - `tags`: List of optional tags
 - `links`: List of IDs of linked tasks
+- `important`: Boolean indicating if task is marked as important
+- `subtasks`: List of IDs of subtasks (children) of this task
 
 If the data file is missing it will be created automatically. If the file is corrupted (invalid JSON), the program will attempt to back it up to a `*.bak` file and continue with an empty task list.
 
@@ -205,6 +247,8 @@ Tests cover:
 - Tag listing and counting
 - Important flag marking and unmarking
 - Task sorting by due date, creation time, title, and ID with reverse order
+- Subtask creation, listing, and parent-child relationships
+- Linking existing tasks as subtasks and avoiding duplicates
 
 If you see import errors like `Import "prototype_pkms" could not be resolved`, make sure you run the command from the repository root so Python can import the module alongside `prototype_pkms.py`.
 
@@ -214,11 +258,11 @@ If you see import errors like `Import "prototype_pkms" could not be resolved`, m
 - Timestamps: Created times are stored in human-friendly format (YYYY-MM-DD HH:MM:SS UTC) for easy readability.
 - Tags: Tasks support multiple tags. Use `tags` to list all tags, and `search-tags` to find tasks by tag(s) with AND/OR logic.
 - Linking: Tasks can be linked to create relationships. When displaying a task, linked tasks are shown with commands to view them.
-- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
+- Subtasks: Organize tasks hierarchically by linking existing tasks as subtasks. Both parent and subtask must be existing tasks. Parent tasks display a count of subtasks with a hint to view them. The same task can be a subtask of multiple parents.
 - Important flag: Tasks can be marked important (`important` field). Use `--important` when adding or the `mark-important` / `unmark-important` commands to toggle. Important tasks are highlighted when displayed.
 - Sorting: The `list` command supports sorting by due date, creation time, title, or task ID with optional reverse order. When sorting by due date, tasks without a due date are placed at the end.
- - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`) so it can be imported and used programmatically.
-- Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task relationships beyond simple links, and interactive mode features.
+- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`, `add_subtask`, `show_subtasks`) so it can be imported and used programmatically.
+- Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task completion tracking, and interactive mode features.
 
 ## License / attribution
 

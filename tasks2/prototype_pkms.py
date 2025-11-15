@@ -37,6 +37,7 @@ class Task:
     tags: List[str] = field(default_factory=list)
     links: List[str] = field(default_factory=list)
     important: bool = False
+    subtasks: List[str] = field(default_factory=list)
 
 
 def data_file_path(path: Optional[str] = None) -> Path:
@@ -131,6 +132,33 @@ def add_link(source_id: str, target_id: str, path: Optional[str] = None) -> bool
     return True
 
 
+def add_subtask(parent_id: str, subtask_id: str, path: Optional[str] = None) -> Optional[Task]:
+    """Link an existing task as a subtask of a parent task.
+    
+    Both parent_id and subtask_id must exist as existing tasks.
+    
+    Returns the subtask on success, None if either task not found or already linked.
+    """
+    tasks = load_tasks(path)
+    parent = find_task(parent_id, tasks)
+    subtask = find_task(subtask_id, tasks)
+    
+    if parent is None:
+        print(f"Parent task {parent_id} not found.", file=sys.stderr)
+        return None
+    
+    if subtask is None:
+        print(f"Subtask {subtask_id} not found.", file=sys.stderr)
+        return None
+    
+    # Link the subtask to the parent if not already linked
+    if subtask_id not in parent.subtasks:
+        parent.subtasks.append(subtask_id)
+        save_tasks(tasks, path)
+    
+    return subtask
+
+
 def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
     tasks = load_tasks(path)
     t = find_task(task_id, tasks)
@@ -154,6 +182,12 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
         print("    Linked tasks:")
         for lid in t.links:
             print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
+    # Display subtask count if there are any
+    if getattr(t, 'subtasks', None):
+        subtask_count = len(t.subtasks)
+        print(f"    \033[33mSubtasks:\033[0m {subtask_count} subtask(s)")
+        if subtask_count > 0:
+            print(f"      To view subtasks: python prototype_pkms.py show-subtasks {t.id}")
     return t
 
 
@@ -162,6 +196,26 @@ def list_tasks(path: Optional[str] = None, tag: Optional[str] = None) -> List[Ta
     if tag:
         tasks = [t for t in tasks if tag in (t.tags or [])]
     return tasks
+
+
+def show_subtasks(parent_id: str, path: Optional[str] = None) -> List[Task]:
+    """Show all subtasks for a given parent task. Returns list of subtasks."""
+    tasks = load_tasks(path)
+    parent = find_task(parent_id, tasks)
+    if parent is None:
+        print(f"Parent task {parent_id} not found.")
+        return []
+    
+    subtasks = [find_task(sid, tasks) for sid in getattr(parent, 'subtasks', [])]
+    subtasks = [s for s in subtasks if s is not None]  # Filter out any None values
+    
+    if not subtasks:
+        print(f"No subtasks for task [{parent_id}] {parent.title}")
+        return []
+    
+    print(f"Subtasks for [{parent_id}] {parent.title}:")
+    pretty_print(subtasks)
+    return subtasks
 
 
 def search_tasks(query: str, path: Optional[str] = None) -> List[Task]:
@@ -294,6 +348,11 @@ def pretty_print(tasks: List[Task]) -> None:
             print("    Linked tasks:")
             for lid in t.links:
                 print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
+        # Display subtask count if there are any
+        if getattr(t, 'subtasks', None):
+            subtask_count = len(t.subtasks)
+            if subtask_count > 0:
+                print(f"    \033[33mSubtasks:\033[0m {subtask_count} subtask(s) - run: python prototype_pkms.py show-subtasks {t.id}")
         print(f"    Created: {t.created_at}")
 
 
@@ -339,6 +398,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_unmark = sub.add_parser("unmark-important", help="Unmark a task as important")
     p_unmark.add_argument("task_id", help="ID of task to unmark as important")
+
+    p_add_subtask = sub.add_parser("add-subtask", help="Link an existing task as a subtask to a parent task")
+    p_add_subtask.add_argument("parent_id", help="ID of the parent task")
+    p_add_subtask.add_argument("subtask_id", help="ID of the existing task to link as a subtask")
+
+    p_show_subtasks = sub.add_parser("show-subtasks", help="Show all subtasks for a parent task")
+    p_show_subtasks.add_argument("parent_id", help="ID of the parent task")
 
     return parser
 
@@ -429,6 +495,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print(f"Task {args.task_id} not found")
             return 2
+
+    if args.cmd == "add-subtask":
+        t = add_subtask(args.parent_id, args.subtask_id, path=data_path)
+        if t is None:
+            return 2
+        print(f"Linked task {t.id} as subtask to parent {args.parent_id}")
+        return 0
+
+    if args.cmd == "show-subtasks":
+        show_subtasks(args.parent_id, path=data_path)
+        return 0
 
     parser.print_help()
     return 2

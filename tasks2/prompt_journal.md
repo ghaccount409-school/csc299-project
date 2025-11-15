@@ -951,3 +951,117 @@ Within valid dates, they're sorted chronologically by the date string
 This prevents malformed due dates from breaking the sort order and keeps the output predictable and usable.
 
 Claude Haiku 4.5 • 1x
+
+### User(your input)
+
+add a new subtasks feature where a task can be added under another task. When a task is listed, there should be a "Subtasks: '# of subtasks'" count listed under the task's information. The word "Subtasks" should be highlighted orange on the display. The subtasks should not be fully listed unless a command is run(add a hint for the command when listing parent task).
+
+### Assistant(AI output)
+
+Perfect! Let me create a quick summary of what was implemented:
+
+✅ Subtasks Feature Complete
+I've successfully implemented a comprehensive subtasks feature for your task manager. Here's what was added:
+
+Core Implementation:
+Data Model
+
+Added subtasks: List[str] field to the Task dataclass to store IDs of child tasks
+Helper Functions
+
+add_subtask(): Creates a new task and links it to a parent task
+show_subtasks(): Displays all subtasks for a given parent task
+Display Updates
+
+Updated pretty_print() to show subtask counts with orange highlighting (\033[33m)
+Includes a helpful hint to view subtasks using the show-subtasks command
+Updated show_task() to display subtask counts and hints when viewing parent tasks
+CLI Commands
+
+add-subtask <parent-id> <title> - Add a subtask with optional --notes, --due, --tag, --important flags
+show-subtasks <parent-id> - Display all subtasks for a parent task
+Key Features:
+✓ Subtasks are full-fledged tasks with their own tags, due dates, and importance flags
+✓ Proper error handling if parent task doesn't exist
+✓ Orange color highlighting for "Subtasks:" label in listings
+✓ Helpful command hints to navigate between parent and subtask views
+✓ Can create nested hierarchies (subtasks can themselves have subtasks)
+
+Testing:
+Added 6 comprehensive unit tests covering:
+
+Adding single and multiple subtasks
+Displaying subtask counts
+Handling empty subtask lists
+Handling nonexistent parent tasks
+Verifying all fields are preserved in subtasks
+Documentation:
+Updated README with:
+
+New Subtasks feature in Features section
+Complete example workflow showing parent task creation and subtask management
+Updated data format JSON showing the subtasks field
+Updated test coverage list
+Updated development notes with subtask details
+The feature is fully integrated and ready to use!
+
+### User(your input)
+
+Make it so only existing tasks can be added as subtasks, only taking the parent id and the subtask id as arguments
+
+### Assistant(AI output)
+
+Perfect! Everything looks good. Let me create a comprehensive summary:
+
+✅ Refactored Subtasks Feature - Only Link Existing Tasks
+I've successfully refactored the subtasks feature to only link existing tasks with a simplified interface. Here's what changed:
+
+Core Changes:
+Simplified add_subtask() function:
+
+Now takes only 3 parameters: parent_id, subtask_id, and optional path
+Both tasks must already exist - no task creation
+Returns the subtask task object on success, None if either task not found
+Prevents duplicate links (idempotent - can call multiple times safely)
+Updated CLI Command:
+
+add-subtask <parent-id> <subtask-id> - Takes only two required positional arguments
+Simplified help text reflects the linking-only behavior
+Much cleaner and more focused
+Cleaner Output:
+
+Single message: "Linked task X as subtask to parent Y"
+No need to check if creating or linking
+Usage Examples:
+
+# Create tasks first
+python prototype_pkms.py add "Project planning" --id planpython prototype_pkms.py add "Research" --id researchpython prototype_pkms.py add "Proposal" --id proposal
+# Link them as subtasks (both must exist)
+python prototype_pkms.py add-subtask plan research
+python prototype_pkms.py add-subtask plan proposal
+# View subtasks
+python prototype_pkms.py show-subtasks plan
+
+Key Benefits:
+✓ Simpler Interface - Only parent_id and subtask_id needed
+✓ Clearer Intent - Only links, doesn't create
+✓ No Side Effects - Can safely link the same task multiple times
+✓ Validation - Both tasks must exist or command fails with clear error
+✓ Flexible - Same task can be subtask of multiple parents
+
+Updated Tests:
+Replaced all tests with 7 simpler, focused tests:
+
+test_add_subtask - Basic linking
+test_add_multiple_subtasks - Multiple links
+test_add_subtask_to_nonexistent_parent - Error handling
+test_add_subtask_nonexistent_subtask - Error handling
+test_show_subtasks - Verify retrieval
+test_show_subtasks_empty - Empty list handling
+test_link_same_subtask_twice - Duplicate prevention
+Documentation Updated:
+README examples show creating tasks first, then linking
+Clarified that both tasks must exist
+Updated development notes
+Test coverage updated
+The implementation is now much cleaner and more focused on its single responsibility: linking existing tasks hierarchically.
