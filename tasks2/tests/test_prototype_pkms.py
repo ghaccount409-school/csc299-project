@@ -4,7 +4,7 @@ import os
 import json
 from datetime import datetime
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags
 import io
 import contextlib
 import re
@@ -132,6 +132,39 @@ class TestTaskCLI(unittest.TestCase):
         add_task("Existing", custom_id="exists", path=self.datafile)
         self.assertTrue(task_id_exists("exists", path=self.datafile))
         self.assertFalse(task_id_exists("nonexistent", path=self.datafile))
+
+    def test_search_tasks_by_tags_any(self):
+        # Create tasks with different tag combinations
+        add_task("Task 1", tags=["home", "urgent"], path=self.datafile)
+        add_task("Task 2", tags=["work"], path=self.datafile)
+        add_task("Task 3", tags=["home", "shopping"], path=self.datafile)
+        
+        # Search for tasks with "home" OR "work"
+        found = search_tasks_by_tags(["home", "work"], path=self.datafile, match_all=False)
+        self.assertEqual(len(found), 3)
+
+    def test_search_tasks_by_tags_all(self):
+        # Create tasks with different tag combinations
+        add_task("Task 1", tags=["home", "urgent"], path=self.datafile)
+        add_task("Task 2", tags=["work"], path=self.datafile)
+        add_task("Task 3", tags=["home", "urgent", "shopping"], path=self.datafile)
+        
+        # Search for tasks with "home" AND "urgent"
+        found = search_tasks_by_tags(["home", "urgent"], path=self.datafile, match_all=True)
+        self.assertEqual(len(found), 2)
+
+    def test_list_all_tags(self):
+        add_task("Task 1", tags=["home", "urgent"], path=self.datafile)
+        add_task("Task 2", tags=["work", "urgent"], path=self.datafile)
+        add_task("Task 3", tags=["home", "shopping"], path=self.datafile)
+        
+        tag_counts = list_all_tags(path=self.datafile)
+        self.assertEqual(tag_counts["home"], 2)
+        self.assertEqual(tag_counts["urgent"], 2)
+        self.assertEqual(tag_counts["work"], 1)
+        self.assertEqual(tag_counts["shopping"], 1)
+        # Verify tags are sorted alphabetically
+        self.assertEqual(list(tag_counts.keys()), sorted(tag_counts.keys()))
 
 
 if __name__ == "__main__":

@@ -10,8 +10,11 @@ It stores tasks as JSON and supports adding, listing, searching tasks, and linki
 - **Custom task IDs** via `--id` flag (must be unique)
 - List tasks (optionally filtered by tag)
 - Search by keyword in title or notes
+- **Search tasks by tags** with AND/OR logic
+- **List all tags** with counts
 - **Link tasks together** and view linked relationships
 - Show individual task details with linked tasks
+- Human-friendly `created_at` format (YYYY-MM-DD HH:MM:SS UTC)
 - Default JSON data file: `tasks.json` next to `prototype_pkms.py` (override with `--data`)
 
 ## Requirements
@@ -71,6 +74,30 @@ python prototype_pkms.py link study-math study-physics
 
 Links the target task to the source task. When you list or show the source task, linked tasks are displayed with view commands.
 
+### List all tags
+
+```powershell
+python prototype_pkms.py tags
+```
+
+Output shows all tags with their counts:
+```
+Tags:
+  home: 3 task(s)
+  shopping: 2 task(s)
+  urgent: 1 task(s)
+```
+
+### Search by tags
+
+```powershell
+# Find tasks with ANY of the tags (default)
+python prototype_pkms.py search-tags home work
+
+# Find tasks with ALL of the tags
+python prototype_pkms.py search-tags home urgent --all
+```
+
 ### Use a custom data file
 
 ```powershell
@@ -87,7 +114,7 @@ Tasks are stored as a JSON array where each task is an object like:
   "id": "a1b2c3d4",
   "title": "Buy milk",
   "notes": "2 litres",
-  "created_at": "2025-11-10T12:34:56.789Z",
+  "created_at": "2025-11-15 14:23:01 UTC",
   "due": "2025-11-11",
   "tags": ["home", "shopping"],
   "links": ["xyz1mnop"]
@@ -97,7 +124,7 @@ Tasks are stored as a JSON array where each task is an object like:
 - `id`: Auto-generated 8-character hex ID or custom user-defined string (must be unique)
 - `title`: Task title
 - `notes`: Optional notes
-- `created_at`: ISO 8601 timestamp with Z suffix
+- `created_at`: Human-friendly timestamp (YYYY-MM-DD HH:MM:SS UTC)
 - `due`: Optional due date
 - `tags`: List of optional tags
 - `links`: List of IDs of linked tasks
@@ -115,7 +142,7 @@ python -m unittest discover -v
 Or run the specific test module from the repo root:
 
 ```powershell
-python -m unittest tasks1.tests.test_prototype_pkms -v
+python -m unittest tasks2.tests.test_prototype_pkms -v
 ```
 
 Tests cover:
@@ -124,15 +151,19 @@ Tests cover:
 - Custom ID creation and uniqueness checking
 - Task linking and showing linked relationships
 - Data file persistence and corruption handling
-- Created timestamp format validation
+- Human-friendly created timestamp format validation (YYYY-MM-DD HH:MM:SS UTC)
+- Tag searching with ANY/ALL logic
+- Tag listing and counting
 
 If you see import errors like `Import "prototype_pkms" could not be resolved`, make sure you run the command from the repository root so Python can import the module alongside `prototype_pkms.py`.
 
 ## Development notes
 
 - Task IDs: By default, short 8-character hex IDs are auto-generated. Users can also provide custom IDs via `--id` (must be unique).
+- Timestamps: Created times are stored in human-friendly format (YYYY-MM-DD HH:MM:SS UTC) for easy readability.
+- Tags: Tasks support multiple tags. Use `tags` to list all tags, and `search-tags` to find tasks by tag(s) with AND/OR logic.
 - Linking: Tasks can be linked to create relationships. When displaying a task, linked tasks are shown with commands to view them.
-- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `add_link`, `show_task`) so it can be imported and used programmatically.
+- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
 - Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task relationships beyond simple links, and CLI history/autocomplete.
 
 ## License / attribution

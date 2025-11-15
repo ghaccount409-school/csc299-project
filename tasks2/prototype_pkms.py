@@ -160,6 +160,34 @@ def search_tasks(query: str, path: Optional[str] = None) -> List[Task]:
     return found
 
 
+def search_tasks_by_tags(tags: List[str], path: Optional[str] = None, match_all: bool = False) -> List[Task]:
+    """Search for tasks by one or more tags.
+    
+    Args:
+        tags: List of tags to search for
+        path: Path to data file
+        match_all: If True, task must have ALL tags. If False, task must have ANY tag.
+    """
+    tasks = load_tasks(path)
+    if match_all:
+        # Task must have all specified tags
+        found = [t for t in tasks if all(tag in (t.tags or []) for tag in tags)]
+    else:
+        # Task must have at least one specified tag
+        found = [t for t in tasks if any(tag in (t.tags or []) for tag in tags)]
+    return found
+
+
+def list_all_tags(path: Optional[str] = None) -> dict:
+    """List all tags and their counts across all tasks."""
+    tasks = load_tasks(path)
+    tag_counts = {}
+    for task in tasks:
+        for tag in (task.tags or []):
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    return dict(sorted(tag_counts.items()))
+
+
 def pretty_print(tasks: List[Task]) -> None:
     if not tasks:
         print("No tasks.")
@@ -204,6 +232,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_link.add_argument("source_id", help="ID of the task to add link to (source)")
     p_link.add_argument("target_id", help="ID of the task to link (target)")
 
+    p_tags = sub.add_parser("tags", help="List all tags and their counts")
+
+    p_search_tags = sub.add_parser("search-tags", help="Search tasks by one or more tags")
+    p_search_tags.add_argument("tag", nargs="+", help="Tag(s) to search for")
+    p_search_tags.add_argument("--all", action="store_true", help="Match tasks with ALL specified tags (default: ANY)")
+
     return parser
 
 
@@ -246,6 +280,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print("One or both task IDs not found.")
             return 2
+
+    if args.cmd == "tags":
+        tag_counts = list_all_tags(path=data_path)
+        if not tag_counts:
+            print("No tags found.")
+            return 0
+        print("Tags:")
+        for tag, count in tag_counts.items():
+            print(f"  {tag}: {count} task(s)")
+        return 0
+
+    if args.cmd == "search-tags":
+        match_all = args.all
+        tasks = search_tasks_by_tags(args.tag, path=data_path, match_all=match_all)
+        if tasks:
+            mode = "all" if match_all else "any"
+            print(f"Found {len(tasks)} task(s) with {mode} of: {', '.join(args.tag)}")
+            pretty_print(tasks)
+        else:
+            print(f"No tasks found with {('all' if match_all else 'any')} of: {', '.join(args.tag)}")
+        return 0
 
     parser.print_help()
     return 2
