@@ -306,3 +306,33 @@ If you'd like, I can now:
 Which do you want me to do next?
 
 Made changes.entry
+
+## PKMS Prototype Test and Feature Iterations, 11/15/25
+
+### User(your input)
+
+add more extensive testing to the test file
+
+### Assistant(AI output)
+
+I'll update the todo list to mark tests work in-progress, then edit tests/test_prototype_pkms.py to add more extensive unit tests (persistence, tag filtering, empty behavior, corrupted JSON backup, created_at format). After that I'll run the unit tests for the file and report results.
+
+Starting (3/5) Add tests
+
+Using "Apply Patch"
+
+Searched for files matching **/test_prototype_pkms.py, no matches
+
+Creating test file
+Applying absolute path
+test_prototype_pkms.py
+Discovering tests...
+
+
+python -m unittest tests.test_prototype_pkms -v
+I updated tests/test_prototype_pkms.py with a more comprehensive test suite (tags, persistence, empty-file behavior, corrupted JSON backup, created_at format). I attempted to run the tests here but the run was skipped.
+
+Next steps I can take (pick one):
+
+Run the tests for you now in the local PowerShell terminal and report the results (I’ll run python -m unittest tests.test_prototype_pkms -v in the repo directory).
+Try running all tests with discovery and report failures.
