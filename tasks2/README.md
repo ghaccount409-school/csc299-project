@@ -16,6 +16,8 @@ It stores tasks as JSON and supports adding, listing, searching tasks, and linki
 - **Organize tasks hierarchically with subtasks** - add subtasks to parent tasks, or link existing tasks as subtasks
 - Show individual task details with linked tasks and subtask counts
 - **Mark tasks as important** with visual highlighting (yellow) - includes mark/unmark commands
+- Task IDs and titles are highlighted in green in terminal listings for easier scanning
+- **Delete tasks** with optional handling of subtasks (delete them or orphan them)
 - **Sort tasks** by due date, creation time, title, or ID with ascending/descending options
 - Human-friendly `created_at` format (YYYY-MM-DD HH:MM:SS UTC)
 - Default JSON data file: `tasks.json` next to `prototype_pkms.py` (override with `--data`)
@@ -175,6 +177,38 @@ python prototype_pkms.py show-subtasks plan-proj
 
 Only existing tasks can be added as subtasks. Both the parent task and the subtask must already exist.
 
+### Delete tasks
+
+You can delete tasks using the `delete` command:
+
+```powershell
+python prototype_pkms.py delete <task-id>
+```
+
+When deleting a task that has subtasks, you will be prompted to choose:
+- **Yes** (`y`): Delete the task and all its subtasks
+- **No** (`n`): Delete the task but keep the subtasks as regular (independent) tasks
+- **Cancel** (`c`): Abort the deletion
+
+Example workflow:
+```powershell
+# Create a parent task with subtasks
+python prototype_pkms.py add "Project" --id proj
+python prototype_pkms.py add "Phase 1" --id phase1
+python prototype_pkms.py add "Phase 2" --id phase2
+python prototype_pkms.py add-subtask proj phase1
+python prototype_pkms.py add-subtask proj phase2
+
+# Delete with prompt (if task has subtasks)
+python prototype_pkms.py delete proj
+# > Task 'Project' has 2 subtask(s). Delete them too? (yes/no/cancel): 
+
+# If you answer "yes": both proj, phase1, and phase2 are deleted
+# If you answer "no": proj is deleted, but phase1 and phase2 become independent tasks
+```
+
+You can also force the deletion behavior programmatically by using the delete function with `delete_subtasks=True` or `delete_subtasks=False`.
+
 ### Search by tags
 
 ```powershell
@@ -249,6 +283,7 @@ Tests cover:
 - Task sorting by due date, creation time, title, and ID with reverse order
 - Subtask creation, listing, and parent-child relationships
 - Linking existing tasks as subtasks and avoiding duplicates
+- Task deletion with and without subtasks
 
 If you see import errors like `Import "prototype_pkms" could not be resolved`, make sure you run the command from the repository root so Python can import the module alongside `prototype_pkms.py`.
 
@@ -261,8 +296,9 @@ If you see import errors like `Import "prototype_pkms" could not be resolved`, m
 - Subtasks: Organize tasks hierarchically by linking existing tasks as subtasks. Both parent and subtask must be existing tasks. Parent tasks display a count of subtasks with a hint to view them. The same task can be a subtask of multiple parents.
 - Important flag: Tasks can be marked important (`important` field). Use `--important` when adding or the `mark-important` / `unmark-important` commands to toggle. Important tasks are highlighted when displayed.
 - Sorting: The `list` command supports sorting by due date, creation time, title, or task ID with optional reverse order. When sorting by due date, tasks without a due date are placed at the end (they remain at the end even when using `--reverse`).
-- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`, `add_subtask`, `show_subtasks`) so it can be imported and used programmatically.
-- Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task completion tracking, and interactive mode features.
+- Deletion: The `delete` command removes tasks. If a task has subtasks, the user is prompted to choose whether to delete the subtasks along with the parent or keep them as independent tasks. The behavior can be controlled programmatically with the `delete_subtasks` parameter.
+- The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`, `add_subtask`, `show_subtasks`, `delete_task`) so it can be imported and used programmatically.
+- Future enhancements could include: marking tasks as completed, JSON schema validation, task completion tracking, and interactive mode features.
 
 ## License / attribution
 

@@ -170,7 +170,10 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
         prefix = "\033[93mImportant:\033[0m "
     else:
         prefix = ""
-    print(f"- {prefix}[{t.id}] {t.title}")
+    # Highlight only the title in green; keep ID uncolored
+    green = "\033[92m"
+    reset = "\033[0m"
+    print(f"- {prefix}[{t.id}] {green}{t.title}{reset}")
     if t.notes:
         print(f"    Notes: {t.notes}")
     if t.due:
@@ -210,15 +213,30 @@ def show_subtasks(parent_id: str, path: Optional[str] = None) -> List[Task]:
     subtasks = [s for s in subtasks if s is not None]  # Filter out any None values
     
     if not subtasks:
-        print(f"No subtasks for task [{parent_id}] {parent.title}")
+        # Show title highlighted only
+        green = "\033[92m"
+        reset = "\033[0m"
+        print(f"No subtasks for task [{parent.id}] {green}{parent.title}{reset}")
         return []
-    
-    print(f"Subtasks for [{parent_id}] {parent.title}:")
+
+    green = "\033[92m"
+    reset = "\033[0m"
+    # Highlight only the parent title, not the ID
+    print(f"Subtasks for [{parent.id}] {green}{parent.title}{reset}:")
     pretty_print(subtasks)
     return subtasks
 
 
 def search_tasks(query: str, path: Optional[str] = None) -> List[Task]:
+    """Search for tasks by keyword in title or notes.
+
+    Args:
+        query: Search string to match (case-insensitive) against title and notes.
+        path: Optional path to the data file.
+
+    Returns:
+        List of matching Task objects.
+    """
     q = query.lower()
     tasks = load_tasks(path)
     found = [t for t in tasks if q in t.title.lower() or (t.notes and q in t.notes.lower())]
@@ -227,7 +245,7 @@ def search_tasks(query: str, path: Optional[str] = None) -> List[Task]:
 
 def search_tasks_by_tags(tags: List[str], path: Optional[str] = None, match_all: bool = False) -> List[Task]:
     """Search for tasks by one or more tags.
-    
+
     Args:
         tags: List of tags to search for
         path: Path to data file
@@ -341,6 +359,64 @@ def unmark_important(task_id: str, path: Optional[str] = None) -> bool:
     return True
 
 
+def delete_task(task_id: str, path: Optional[str] = None, delete_subtasks: Optional[bool] = None) -> Optional[bool]:
+    """Delete a task.
+    
+    Args:
+        task_id: ID of the task to delete
+        path: Optional path to the data file
+        delete_subtasks: If the task has subtasks:
+            - True: delete subtasks along with the parent task
+            - False: orphan subtasks (remove their parent reference, making them regular tasks)
+            - None: prompt user for choice (returns None if user cancels)
+    
+    Returns:
+        True if task was deleted successfully
+        False if task not found
+        None if user cancelled (when delete_subtasks=None and task has subtasks)
+    """
+    tasks = load_tasks(path)
+    t = find_task(task_id, tasks)
+    
+    if t is None:
+        return False
+    
+    # Check if task has subtasks
+    subtasks = getattr(t, 'subtasks', [])
+    if subtasks and delete_subtasks is None:
+        # Prompt user
+        while True:
+            response = input(f"Task '{t.title}' has {len(subtasks)} subtask(s). Delete them too? (yes/no/cancel): ").strip().lower()
+            if response in ('yes', 'y'):
+                delete_subtasks = True
+                break
+            elif response in ('no', 'n'):
+                delete_subtasks = False
+                break
+            elif response in ('cancel', 'c'):
+                return None
+            else:
+                print("Please enter 'yes', 'no', or 'cancel'.")
+    
+    # Handle subtasks
+    if delete_subtasks and subtasks:
+        # Delete subtasks along with parent
+        tasks = [t for t in tasks if t.id not in subtasks]
+    elif not delete_subtasks and subtasks:
+        # Orphan subtasks: clear their parent reference
+        for subtask_id in subtasks:
+            subtask = find_task(subtask_id, tasks)
+            if subtask:
+                # Subtasks don't have a "parent_id" field; they're referenced in parent's subtasks list
+                # So just removing from parent.subtasks list orphans them (done below)
+                pass
+    
+    # Remove the task itself
+    tasks = [t for t in tasks if t.id != task_id]
+    save_tasks(tasks, path)
+    return True
+
+
 def pretty_print(tasks: List[Task]) -> None:
     if not tasks:
         print("No tasks.")
@@ -350,7 +426,10 @@ def pretty_print(tasks: List[Task]) -> None:
             prefix = "\033[93mImportant:\033[0m "
         else:
             prefix = ""
-        print(f"- {prefix}[{t.id}] {t.title}")
+        # Highlight only the title in green; keep ID plain
+        green = "\033[92m"
+        reset = "\033[0m"
+        print(f"- {prefix}[{t.id}] {green}{t.title}{reset}")
         if t.notes:
             print(f"    Notes: {t.notes}")
         if t.due:
@@ -360,6 +439,7 @@ def pretty_print(tasks: List[Task]) -> None:
         if t.links:
             print("    Linked tasks:")
             for lid in t.links:
+                # Do not color linked task IDs in the list view
                 print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
         # Display subtask count if there are any
         if getattr(t, 'subtasks', None):
@@ -418,6 +498,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_show_subtasks = sub.add_parser("show-subtasks", help="Show all subtasks for a parent task")
     p_show_subtasks.add_argument("parent_id", help="ID of the parent task")
+
+    p_delete = sub.add_parser("delete", help="Delete a task")
+    p_delete.add_argument("task_id", help="ID of the task to delete")
 
     return parser
 
@@ -519,6 +602,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.cmd == "show-subtasks":
         show_subtasks(args.parent_id, path=data_path)
         return 0
+
+    if args.cmd == "delete":
+        result = delete_task(args.task_id, path=data_path)
+        if result is True:
+            print(f"Deleted task {args.task_id}")
+            return 0
+        elif result is False:
+            print(f"Task {args.task_id} not found")
+            return 2
+        else:  # result is None (user cancelled)
+            print("Delete cancelled.")
+            return 1
 
     parser.print_help()
     return 2

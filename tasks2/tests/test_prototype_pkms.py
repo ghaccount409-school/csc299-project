@@ -10,7 +10,7 @@ TEST_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if TEST_ROOT not in sys.path:
     sys.path.insert(0, TEST_ROOT)
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks, add_subtask, show_subtasks
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks, add_subtask, show_subtasks, delete_task
 import io
 import contextlib
 import re
@@ -350,6 +350,73 @@ class TestTaskCLI(unittest.TestCase):
         parent_updated = [t for t in tasks if t.id == parent.id][0]
         count = parent_updated.subtasks.count(existing.id)
         self.assertEqual(count, 1)
+
+    def test_delete_task_simple(self):
+        """Delete a simple task without subtasks."""
+        task = add_task("Delete me", path=self.datafile)
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 1)
+        
+        # Delete the task
+        result = delete_task(task.id, path=self.datafile, delete_subtasks=False)
+        self.assertTrue(result)
+        
+        # Verify it's gone
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 0)
+
+    def test_delete_task_not_found(self):
+        """Try to delete a task that doesn't exist."""
+        result = delete_task("nonexistent-id", path=self.datafile)
+        self.assertFalse(result)
+
+    def test_delete_task_with_subtasks_yes(self):
+        """Delete a task and its subtasks (delete_subtasks=True)."""
+        parent = add_task("Parent to delete", path=self.datafile)
+        sub1 = add_task("Subtask 1", path=self.datafile)
+        sub2 = add_task("Subtask 2", path=self.datafile)
+        extra = add_task("Unrelated task", path=self.datafile)
+        
+        # Link subtasks
+        add_subtask(parent.id, sub1.id, path=self.datafile)
+        add_subtask(parent.id, sub2.id, path=self.datafile)
+        
+        # Verify initial state
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 4)
+        
+        # Delete parent with subtasks
+        result = delete_task(parent.id, path=self.datafile, delete_subtasks=True)
+        self.assertTrue(result)
+        
+        # Verify parent and subtasks are gone, extra remains
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].id, extra.id)
+
+    def test_delete_task_with_subtasks_no(self):
+        """Delete a task but orphan its subtasks (delete_subtasks=False)."""
+        parent = add_task("Parent to delete", path=self.datafile)
+        sub1 = add_task("Subtask 1", path=self.datafile)
+        sub2 = add_task("Subtask 2", path=self.datafile)
+        
+        # Link subtasks
+        add_subtask(parent.id, sub1.id, path=self.datafile)
+        add_subtask(parent.id, sub2.id, path=self.datafile)
+        
+        # Verify initial state
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 3)
+        
+        # Delete parent but keep subtasks
+        result = delete_task(parent.id, path=self.datafile, delete_subtasks=False)
+        self.assertTrue(result)
+        
+        # Verify parent is gone but subtasks remain
+        tasks = list_tasks(path=self.datafile)
+        self.assertEqual(len(tasks), 2)
+        ids = {t.id for t in tasks}
+        self.assertEqual(ids, {sub1.id, sub2.id})
 
 
 if __name__ == "__main__":
