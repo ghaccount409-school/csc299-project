@@ -10,7 +10,7 @@ TEST_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if TEST_ROOT not in sys.path:
     sys.path.insert(0, TEST_ROOT)
 
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important
+from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks
 import io
 import contextlib
 import re
@@ -206,6 +206,72 @@ class TestTaskCLI(unittest.TestCase):
         tasks_after = list_important_tasks(path=self.datafile)
         self.assertEqual(len(tasks_after), 0)
 
+    def test_sort_by_title(self):
+        add_task("Zebra", path=self.datafile)
+        add_task("Apple", path=self.datafile)
+        add_task("Mango", path=self.datafile)
+        
+        tasks = list_tasks(path=self.datafile)
+        sorted_asc = sort_tasks(tasks, sort_by="title", reverse=False)
+        sorted_desc = sort_tasks(tasks, sort_by="title", reverse=True)
+        
+        # Check ascending order
+        self.assertEqual(sorted_asc[0].title, "Apple")
+        self.assertEqual(sorted_asc[1].title, "Mango")
+        self.assertEqual(sorted_asc[2].title, "Zebra")
+        
+        # Check descending order
+        self.assertEqual(sorted_desc[0].title, "Zebra")
+        self.assertEqual(sorted_desc[1].title, "Mango")
+        self.assertEqual(sorted_desc[2].title, "Apple")
+
+    def test_sort_by_id(self):
+        t1 = add_task("Task 1", path=self.datafile)
+        t2 = add_task("Task 2", path=self.datafile)
+        t3 = add_task("Task 3", path=self.datafile)
+        
+        tasks = list_tasks(path=self.datafile)
+        sorted_asc = sort_tasks(tasks, sort_by="id", reverse=False)
+        sorted_desc = sort_tasks(tasks, sort_by="id", reverse=True)
+        
+        # Ascending should preserve or sort by hex value
+        self.assertEqual(len(sorted_asc), 3)
+        self.assertEqual(len(sorted_desc), 3)
+        # Just verify it returns sorted list
+        self.assertEqual(sorted_asc[0].id, sorted(tasks, key=lambda t: t.id)[0].id)
+
+    def test_sort_by_created(self):
+        import time
+        t1 = add_task("First", path=self.datafile)
+        time.sleep(1.1)  # Sleep 1.1 seconds to ensure different second-level timestamps
+        t2 = add_task("Second", path=self.datafile)
+        
+        tasks = list_tasks(path=self.datafile)
+        sorted_asc = sort_tasks(tasks, sort_by="created", reverse=False)
+        sorted_desc = sort_tasks(tasks, sort_by="created", reverse=True)
+        
+        # Ascending: oldest first
+        self.assertEqual(sorted_asc[0].title, "First")
+        self.assertEqual(sorted_asc[1].title, "Second")
+        
+        # Descending: newest first
+        self.assertEqual(sorted_desc[0].title, "Second")
+        self.assertEqual(sorted_desc[1].title, "First")
+
+    def test_sort_by_due(self):
+        add_task("No due", path=self.datafile)
+        add_task("Due early", due="2025-11-10", path=self.datafile)
+        add_task("Due late", due="2025-11-20", path=self.datafile)
+        
+        tasks = list_tasks(path=self.datafile)
+        sorted_asc = sort_tasks(tasks, sort_by="due", reverse=False)
+        
+        # Without due date should be at end
+        self.assertIsNotNone(sorted_asc[0].due)
+        self.assertIsNotNone(sorted_asc[1].due)
+        self.assertIsNone(sorted_asc[2].due)
+
 
 if __name__ == "__main__":
     unittest.main()
+

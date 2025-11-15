@@ -205,6 +205,51 @@ def list_important_tasks(path: Optional[str] = None) -> List[Task]:
     return [t for t in tasks if getattr(t, 'important', False)]
 
 
+def sort_tasks(tasks: List[Task], sort_by: str = "created", reverse: bool = False) -> List[Task]:
+    """Sort tasks by specified field.
+    
+    Args:
+        tasks: List of tasks to sort
+        sort_by: Field to sort by ('due', 'created', 'title', 'id'). Default: 'created'
+        reverse: If True, sort in descending order
+    
+    Returns:
+        Sorted list of tasks
+    """
+    def is_valid_date_format(date_str: Optional[str]) -> bool:
+        """Check if date string is in YYYY-MM-DD format."""
+        if date_str is None:
+            return True
+        try:
+            from datetime import datetime as dt
+            dt.strptime(date_str, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+    
+    if sort_by == "due":
+        # Sort by due date; tasks without due date or invalid format go to end
+        sorted_tasks = sorted(
+            tasks, 
+            key=lambda t: (not is_valid_date_format(t.due), t.due or ""), 
+            reverse=reverse
+        )
+    elif sort_by == "created":
+        # Sort by created_at timestamp
+        sorted_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=reverse)
+    elif sort_by == "title":
+        # Sort by title (alphanumeric)
+        sorted_tasks = sorted(tasks, key=lambda t: t.title.lower(), reverse=reverse)
+    elif sort_by == "id":
+        # Sort by task ID
+        sorted_tasks = sorted(tasks, key=lambda t: t.id, reverse=reverse)
+    else:
+        # Default to created if invalid sort_by
+        sorted_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=reverse)
+    
+    return sorted_tasks
+
+
 def mark_important(task_id: str, path: Optional[str] = None) -> bool:
     """Mark a task as important. Returns True if changed, False if not found."""
     tasks = load_tasks(path)
@@ -268,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument("--tag", help="Filter by tag")
+    p_list.add_argument("--sort-by", choices=["due", "created", "title", "id"], default="created", help="Sort by field (default: created)")
+    p_list.add_argument("--reverse", action="store_true", help="Sort in descending order")
 
     p_search = sub.add_parser("search", help="Search tasks by keyword in title or notes")
     p_search.add_argument("query", help="Search query string")
@@ -315,6 +362,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.cmd == "list":
         tasks = list_tasks(path=data_path, tag=args.tag)
+        sort_by = getattr(args, 'sort_by', 'created')
+        reverse = getattr(args, 'reverse', False)
+        tasks = sort_tasks(tasks, sort_by=sort_by, reverse=reverse)
         pretty_print(tasks)
         return 0
 

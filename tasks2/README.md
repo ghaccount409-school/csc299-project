@@ -56,6 +56,28 @@ python prototype_pkms.py list
 python prototype_pkms.py list --tag shopping
 ```
 
+You can also sort tasks with the `--sort-by` option:
+
+```powershell
+# Sort by due date (ascending, tasks without due dates go to end)
+python prototype_pkms.py list --sort-by due
+
+# Sort by creation date (descending/newest first)
+python prototype_pkms.py list --sort-by created --reverse
+
+# Sort by title alphabetically
+python prototype_pkms.py list --sort-by title
+
+# Sort by task ID
+python prototype_pkms.py list --sort-by id --reverse
+
+# Combine sorting with tag filtering
+python prototype_pkms.py list --tag shopping --sort-by due
+```
+
+The `--sort-by` option accepts: `due`, `created`, `title`, or `id` (default is `created`).
+The `--reverse` flag reverses the sort order (descending instead of ascending).
+
 ### Search tasks
 
 ```powershell
@@ -181,6 +203,8 @@ Tests cover:
 - Human-friendly created timestamp format validation (YYYY-MM-DD HH:MM:SS UTC)
 - Tag searching with ANY/ALL logic
 - Tag listing and counting
+- Important flag marking and unmarking
+- Task sorting by due date, creation time, title, and ID with reverse order
 
 If you see import errors like `Import "prototype_pkms" could not be resolved`, make sure you run the command from the repository root so Python can import the module alongside `prototype_pkms.py`.
 
@@ -192,7 +216,8 @@ If you see import errors like `Import "prototype_pkms" could not be resolved`, m
 - Linking: Tasks can be linked to create relationships. When displaying a task, linked tasks are shown with commands to view them.
 - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
 - Important flag: Tasks can be marked important (`important` field). Use `--important` when adding or the `mark-important` / `unmark-important` commands to toggle. Important tasks are highlighted when displayed.
- - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`) so it can be imported and used programmatically.
+- Sorting: The `list` command supports sorting by due date, creation time, title, or task ID with optional reverse order. When sorting by due date, tasks without a due date are placed at the end.
+ - The program exposes core functions (`add_task`, `list_tasks`, `search_tasks`, `search_tasks_by_tags`, `list_all_tags`, `add_link`, `show_task`, `sort_tasks`) so it can be imported and used programmatically.
 - Future enhancements could include: removing tasks, marking tasks as completed, JSON schema validation, task relationships beyond simple links, and interactive mode features.
 
 ## License / attribution
