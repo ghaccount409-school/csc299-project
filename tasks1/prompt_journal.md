@@ -543,3 +543,22 @@ How linking works and when it's displayed
 List of exposed functions for programmatic use
 Future enhancement ideas
 The README is now comprehensive and reflects all the new features!
+
+### User(your input)
+
+Clean up the date and time in created_at to make it more easily readable by humans
+
+### Assistant(AI output)
+
+I'll update the created_at field to use a more human-friendly format (e.g., 2025-11-15 14:23:01 UTC) and update all code that prints or sets this field. The JSON will still store the readable string.
+
+I'll make the change in add_task and update the print logic if needed.
+
+Read test_prototype_pkms.py
+
+Using "Edit File"
+
+prototype_pkms.py+3-2
+The created_at field is now stored in a human-friendly format like 2025-11-15 14:23:01 UTC for all new tasks. This will make task creation times much easier to read in the CLI and in the JSON data file.
+
+Would you like me to update the tests to check for this new format, or do you want to try it out and see the new output first?

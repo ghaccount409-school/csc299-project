@@ -73,15 +73,14 @@ class TestTaskCLI(unittest.TestCase):
         # original datafile should no longer exist (it was moved)
         self.assertFalse(os.path.exists(self.datafile))
 
-    def test_created_at_iso_and_z_suffix(self):
+    def test_created_at_human_friendly_format(self):
         t = add_task("Time check", path=self.datafile)
         tasks = list_tasks(path=self.datafile)
         self.assertEqual(len(tasks), 1)
         created = tasks[0].created_at
-        # should end with Z and be a valid ISO timestamp when trimming the Z
-        self.assertTrue(created.endswith("Z"))
-        # basic parse check (without timezone)
-        datetime.fromisoformat(created.rstrip("Z"))
+        # Should match 'YYYY-MM-DD HH:MM:SS UTC'
+        import re
+        self.assertRegex(created, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$")
 
     def test_linking_and_show(self):
         a = add_task("Parent Task", path=self.datafile)

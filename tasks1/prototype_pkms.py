@@ -88,12 +88,13 @@ def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None,
         task_id = custom_id
     else:
         task_id = generate_short_id()
-    
+    # Use a human-friendly date/time string
+    created_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     new = Task(
         id=task_id,
         title=title,
         notes=notes,
-        created_at=datetime.utcnow().isoformat() + "Z",
+        created_at=created_at,
         due=due,
         tags=tags or [],
         links=[],
