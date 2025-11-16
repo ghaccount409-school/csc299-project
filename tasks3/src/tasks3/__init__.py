@@ -3,3 +3,6 @@ def inc(n: int) -> int:
 
 def main() -> None:
     print("Hello from tasks3!")
+
+if __name__ == "__main__":
+    main()
