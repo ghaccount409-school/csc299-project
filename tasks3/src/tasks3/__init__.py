@@ -59,6 +59,15 @@ class Task:
         important: Boolean flag indicating if task is marked as important
         subtasks: List of task IDs that are subtasks of this parent task
     """
+    id: str
+    title: str
+    notes: Optional[str]
+    created_at: str
+    due: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    links: List[str] = field(default_factory=list)
+    important: bool = False
+    subtasks: List[str] = field(default_factory=list)
 
 
 def data_file_path(path: Optional[str] = None) -> Path:

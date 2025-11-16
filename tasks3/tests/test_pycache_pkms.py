@@ -4,18 +4,17 @@ import json
 from datetime import datetime
 import sys
 import pytest
-
-# Ensure the tasks2 directory (where prototype_pkms.py lives) is on sys.path so tests can import it
-THIS_DIR = os.path.dirname(__file__)
-REPO_ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
-TASKS2_DIR = os.path.join(REPO_ROOT, "tasks2")
-if TASKS2_DIR not in sys.path:
-	sys.path.insert(0, TASKS2_DIR)
-
-from prototype_pkms import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks, add_subtask, show_subtasks, delete_task
 import io
 import contextlib
 import re
+
+# Add tasks3 src directory to path to import from __init__.py
+THIS_DIR = os.path.dirname(__file__)
+TASKS3_SRC = os.path.abspath(os.path.join(THIS_DIR, "..", "src"))
+if TASKS3_SRC not in sys.path:
+	sys.path.insert(0, TASKS3_SRC)
+
+from tasks3 import add_task, list_tasks, search_tasks, load_tasks, add_link, show_task, pretty_print, generate_short_id, task_id_exists, search_tasks_by_tags, list_all_tags, list_important_tasks, mark_important, unmark_important, sort_tasks, add_subtask, show_subtasks, delete_task
 
 
 @pytest.fixture
