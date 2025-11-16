@@ -1,16 +1,34 @@
 """
-Simple task manager CLI stored in `prototype_pkms.py` (per user request).
+Simple JSON-backed task manager CLI stored in `prototype_pkms.py`.
+
+Features:
+  - Add tasks with optional notes, due dates, tags, and custom IDs
+  - List tasks (optionally filtered by tag) with sorting by due/created/title/id
+  - Search tasks by keyword in title or notes
+  - Tag management: list all tags with counts, search tasks by tags (AND/OR logic)
+  - Task relationships: link tasks together, organize with hierarchical subtasks
+  - Mark tasks as important with visual highlighting
+  - Delete tasks with options for handling subtasks
+  - Show individual task details with all relationships and metadata
+  - Human-friendly timestamps (YYYY-MM-DD HH:MM:SS UTC)
+  - Green highlighting of task titles in terminal output
 
 Commands:
-  add    - add a task
-  list   - list tasks
-  search - search tasks by keyword
-  tags   - list all tags
-  search-tags - search by tags
-  show   - show a task
-  link   - link tasks
+  add              - add a new task
+  list             - list tasks (with optional tag filter and sorting)
+  search           - search tasks by keyword
+  show             - show a single task with details
+  search-tags      - search tasks by tags (AND/OR)
+  tags             - list all tags with counts
+  link             - link one task to another
+  add-subtask      - link an existing task as a subtask
+  show-subtasks    - show all subtasks for a parent task
+  mark-important   - mark a task as important
+  unmark-important - unmark a task as important
+  important        - list all important tasks
+  delete           - delete a task (with subtask handling options)
 
-Data file (default): tasks.json next to this script
+Data file (default): tasks.json next to this script (override with --data)
 """
 from __future__ import annotations
 
@@ -29,6 +47,19 @@ DEFAULT_FILENAME = "tasks.json"
 
 @dataclass
 class Task:
+    """Represents a single task with all metadata.
+    
+    Attributes:
+        id: Unique task identifier (8-char hex auto-generated or custom string)
+        title: Task title/description
+        notes: Optional additional notes or details
+        created_at: Human-friendly creation timestamp (YYYY-MM-DD HH:MM:SS UTC)
+        due: Optional due date (any format, but YYYY-MM-DD recommended for sorting)
+        tags: List of optional tags for categorization
+        links: List of task IDs this task is linked to
+        important: Boolean flag indicating if task is marked as important
+        subtasks: List of task IDs that are subtasks of this task (hierarchical)
+    """
     id: str
     title: str
     notes: Optional[str]
@@ -67,6 +98,7 @@ def load_tasks(path: Optional[str] = None) -> List[Task]:
 
 
 def save_tasks(tasks: List[Task], path: Optional[str] = None) -> None:
+    """Save tasks to JSON file, creating parent directories if needed."""
     p = data_file_path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
@@ -74,20 +106,34 @@ def save_tasks(tasks: List[Task], path: Optional[str] = None) -> None:
 
 
 def generate_short_id() -> str:
-    """Generate a short 8-char task ID."""
+    """Generate a short 8-character hex task ID from UUID."""
     return uuid.uuid4().hex[:8]
 
 
 def task_id_exists(task_id: str, path: Optional[str] = None) -> bool:
-    """Check if a task ID already exists."""
+    """Check if a task ID already exists in the data file."""
     tasks = load_tasks(path)
     return any(t.id == task_id for t in tasks)
 
 
 def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, custom_id: Optional[str] = None, important: bool = False, path: Optional[str] = None) -> Optional[Task]:
+    """Create and save a new task.
+    
+    Args:
+        title: Task title (required)
+        notes: Optional notes/description
+        due: Optional due date
+        tags: Optional list of tags
+        custom_id: Optional custom task ID (must be unique); if not provided, auto-generates 8-char hex ID
+        important: Mark task as important (default: False)
+        path: Optional path to data file
+    
+    Returns:
+        The newly created Task object, or None if custom_id already exists
+    """
     tasks = load_tasks(path)
     
-    # Determine task ID
+    # Determine task ID: use custom if provided and unique, otherwise auto-generate
     if custom_id:
         if task_id_exists(custom_id, path):
             print(f"Task ID '{custom_id}' already exists. Please choose a different ID.", file=sys.stderr)
@@ -113,6 +159,7 @@ def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None,
 
 
 def find_task(task_id: str, tasks: List[Task]) -> Optional[Task]:
+    """Find and return a task by ID from a list of tasks, or None if not found."""
     for t in tasks:
         if t.id == task_id:
             return t
@@ -120,7 +167,16 @@ def find_task(task_id: str, tasks: List[Task]) -> Optional[Task]:
 
 
 def add_link(source_id: str, target_id: str, path: Optional[str] = None) -> bool:
-    """Link target task to source task. Returns True on success, False if either task missing."""
+    """Link a target task to a source task (adds to source task's links list).
+    
+    Args:
+        source_id: ID of the task to add the link to
+        target_id: ID of the task being linked
+        path: Optional path to data file
+    
+    Returns:
+        True if link created successfully, False if either task not found or link already exists
+    """
     tasks = load_tasks(path)
     src = find_task(source_id, tasks)
     tgt = find_task(target_id, tasks)
@@ -160,12 +216,29 @@ def add_subtask(parent_id: str, subtask_id: str, path: Optional[str] = None) -> 
 
 
 def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
+    """Display detailed information about a single task.
+    
+    Shows:
+        - Task ID and title (title highlighted in green)
+        - Important status (if marked)
+        - Notes, due date, tags
+        - Creation timestamp
+        - All linked tasks with view commands
+        - Subtask count and hint to view them
+    
+    Args:
+        task_id: ID of the task to display
+        path: Optional path to data file
+    
+    Returns:
+        The Task object if found, None if not found
+    """
     tasks = load_tasks(path)
     t = find_task(task_id, tasks)
     if t is None:
         print(f"Task {task_id} not found.")
         return None
-    # print single task in same format as pretty_print
+    # Display single task with full details and formatting
     if getattr(t, 'important', False):
         prefix = "\033[93mImportant:\033[0m "
     else:
@@ -195,6 +268,15 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
 
 
 def list_tasks(path: Optional[str] = None, tag: Optional[str] = None) -> List[Task]:
+    """Load and optionally filter tasks by tag.
+    
+    Args:
+        path: Optional path to data file
+        tag: Optional tag to filter by (returns only tasks with this tag)
+    
+    Returns:
+        List of Task objects, optionally filtered
+    """
     tasks = load_tasks(path)
     if tag:
         tasks = [t for t in tasks if tag in (t.tags or [])]
@@ -202,7 +284,18 @@ def list_tasks(path: Optional[str] = None, tag: Optional[str] = None) -> List[Ta
 
 
 def show_subtasks(parent_id: str, path: Optional[str] = None) -> List[Task]:
-    """Show all subtasks for a given parent task. Returns list of subtasks."""
+    """Display all subtasks for a given parent task.
+    
+    Shows subtasks in formatted list view with titles highlighted in green.
+    If no subtasks exist, displays a message.
+    
+    Args:
+        parent_id: ID of the parent task
+        path: Optional path to data file
+    
+    Returns:
+        List of subtask Task objects (empty list if none or parent not found)
+    """
     tasks = load_tasks(path)
     parent = find_task(parent_id, tasks)
     if parent is None:
@@ -244,25 +337,35 @@ def search_tasks(query: str, path: Optional[str] = None) -> List[Task]:
 
 
 def search_tasks_by_tags(tags: List[str], path: Optional[str] = None, match_all: bool = False) -> List[Task]:
-    """Search for tasks by one or more tags.
+    """Search for tasks by one or more tags using AND/OR logic.
 
     Args:
         tags: List of tags to search for
-        path: Path to data file
-        match_all: If True, task must have ALL tags. If False, task must have ANY tag.
+        path: Optional path to data file
+        match_all: If True, task must have ALL tags (AND). If False, task must have ANY tag (OR, default).
+    
+    Returns:
+        List of matching Task objects
     """
     tasks = load_tasks(path)
     if match_all:
-        # Task must have all specified tags
+        # Task must have all specified tags (AND logic)
         found = [t for t in tasks if all(tag in (t.tags or []) for tag in tags)]
     else:
-        # Task must have at least one specified tag
+        # Task must have at least one specified tag (OR logic)
         found = [t for t in tasks if any(tag in (t.tags or []) for tag in tags)]
     return found
 
 
 def list_all_tags(path: Optional[str] = None) -> dict:
-    """List all tags and their counts across all tasks."""
+    """List all tags used across tasks with their counts.
+    
+    Args:
+        path: Optional path to data file
+    
+    Returns:
+        Dictionary of tag names to their counts, sorted alphabetically
+    """
     tasks = load_tasks(path)
     tag_counts = {}
     for task in tasks:
@@ -272,7 +375,14 @@ def list_all_tags(path: Optional[str] = None) -> dict:
 
 
 def list_important_tasks(path: Optional[str] = None) -> List[Task]:
-    """Return tasks marked as important."""
+    """Return all tasks marked as important.
+    
+    Args:
+        path: Optional path to data file
+    
+    Returns:
+        List of Task objects with important=True
+    """
     tasks = load_tasks(path)
     return [t for t in tasks if getattr(t, 'important', False)]
 
@@ -336,7 +446,15 @@ def sort_tasks(tasks: List[Task], sort_by: str = "created", reverse: bool = Fals
 
 
 def mark_important(task_id: str, path: Optional[str] = None) -> bool:
-    """Mark a task as important. Returns True if changed, False if not found."""
+    """Mark a task as important (sets important=True).
+    
+    Args:
+        task_id: ID of task to mark
+        path: Optional path to data file
+    
+    Returns:
+        True if task was marked (changed), False if task not found or already marked
+    """
     tasks = load_tasks(path)
     t = find_task(task_id, tasks)
     if t is None:
@@ -348,7 +466,15 @@ def mark_important(task_id: str, path: Optional[str] = None) -> bool:
 
 
 def unmark_important(task_id: str, path: Optional[str] = None) -> bool:
-    """Unmark a task as important. Returns True if changed, False if not found."""
+    """Unmark a task as important (sets important=False).
+    
+    Args:
+        task_id: ID of task to unmark
+        path: Optional path to data file
+    
+    Returns:
+        True if task was unmarked (changed), False if task not found or already unmarked
+    """
     tasks = load_tasks(path)
     t = find_task(task_id, tasks)
     if t is None:
@@ -418,6 +544,19 @@ def delete_task(task_id: str, path: Optional[str] = None, delete_subtasks: Optio
 
 
 def pretty_print(tasks: List[Task]) -> None:
+    """Print a formatted list of tasks with all their details.
+    
+    Displays each task with:
+        - Task ID and title (title highlighted in green)
+        - Important status (if marked, in yellow)
+        - Notes, due date, tags
+        - Linked tasks (with view commands)
+        - Subtask count (if any, in orange)
+        - Creation timestamp
+    
+    Args:
+        tasks: List of Task objects to display
+    """
     if not tasks:
         print("No tasks.")
         return
@@ -450,6 +589,26 @@ def pretty_print(tasks: List[Task]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build and configure the argument parser for all CLI subcommands.
+    
+    Subcommands:
+        - add: Create a new task with optional metadata
+        - list: List tasks with optional filtering and sorting
+        - search: Search tasks by keyword
+        - show: Display a single task with all details
+        - search-tags: Search tasks by tags (AND/OR logic)
+        - tags: List all tags with counts
+        - link: Link one task to another
+        - add-subtask: Link an existing task as a subtask
+        - show-subtasks: Display all subtasks for a parent task
+        - mark-important: Mark a task as important
+        - unmark-important: Unmark a task as important
+        - important: List all important tasks
+        - delete: Delete a task with subtask handling
+    
+    Returns:
+        Configured ArgumentParser instance
+    """
     # Use the actual script filename as the program name in help/usage
     parser = argparse.ArgumentParser(prog=Path(__file__).name, description="Simple JSON-backed task manager (stored in prototype_pkms.py)")
     parser.add_argument("--data", help="Path to JSON data file (defaults to tasks.json next to script)")
@@ -506,6 +665,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """Main entry point for the CLI task manager.
+    
+    Parses command-line arguments and dispatches to appropriate handler for each subcommand.
+    Supports all task operations: add, list, search, show, links, subtasks, marking important,
+    deletion, and tag management.
+    
+    Args:
+        argv: Optional list of command-line arguments (defaults to sys.argv if None)
+    
+    Returns:
+        Exit code: 0 for success, 1 for no command, 2 for error (task not found, etc.)
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
