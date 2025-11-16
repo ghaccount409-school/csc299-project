@@ -1,22 +1,33 @@
-#def inc(n: int) -> int:
-#    return n + 1
-
-#def main() -> None:
-#    print("Hello from tasks3!")
-
 """
-Simple task manager CLI stored in `prototype_pkms.py` (per user request).
+tasks3: A JSON-backed task manager CLI with comprehensive task management features.
+
+This module provides a complete task management system with support for:
+- Creating, listing, searching, and deleting tasks
+- Task linking and hierarchical subtasks
+- Tag-based organization and filtering
+- Task importance flagging
+- Flexible sorting and filtering options
+- Persistent JSON-based storage
 
 Commands:
-  add    - add a task
-  list   - list tasks
-  search - search tasks by keyword
-  tags   - list all tags
-  search-tags - search by tags
-  show   - show a task
-  link   - link tasks
+  add              - Add a new task (with optional tags, due date, notes)
+  list             - List all tasks (with optional tag filtering and sorting)
+  search           - Search tasks by keyword in title or notes
+  show             - Display details of a single task
+  link             - Link one task to another (task relationships)
+  tags             - List all tags and their usage counts
+  search-tags      - Search tasks by one or more tags (ANY or ALL matching)
+  important        - List tasks marked as important
+  mark-important   - Mark a task as important
+  unmark-important - Unmark a task as important
+  add-subtask      - Link an existing task as a subtask to a parent task
+  show-subtasks    - Display all subtasks for a given parent task
+  delete           - Delete a task (with options for handling subtasks)
 
-Data file (default): tasks.json next to this script
+Data Storage:
+  Default data file: tasks.json next to this script
+  Use --data FLAG to specify a custom data file path
+  Data is stored in JSON format with automatic backup of corrupted files
 """
 from __future__ import annotations
 
@@ -35,24 +46,49 @@ DEFAULT_FILENAME = "tasks.json"
 
 @dataclass
 class Task:
-    id: str
-    title: str
-    notes: Optional[str]
-    created_at: str
-    due: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
-    links: List[str] = field(default_factory=list)
-    important: bool = False
-    subtasks: List[str] = field(default_factory=list)
+    """Represents a task in the task manager.
+    
+    Attributes:
+        id: Unique identifier for the task (8-char hex string or custom)
+        title: The task's title/description
+        notes: Optional additional notes or details
+        created_at: Timestamp when task was created (UTC format: YYYY-MM-DD HH:MM:SS UTC)
+        due: Optional due date (user-specified string format, e.g., "2025-11-20")
+        tags: List of tag strings for categorization and filtering
+        links: List of task IDs that this task is linked to (task relationships)
+        important: Boolean flag indicating if task is marked as important
+        subtasks: List of task IDs that are subtasks of this parent task
+    """
 
 
 def data_file_path(path: Optional[str] = None) -> Path:
+    """Get the path to the data file.
+    
+    Args:
+        path: Optional custom path to data file. If not provided, defaults to tasks.json
+              in the same directory as this script.
+    
+    Returns:
+        Path object pointing to the data file location.
+    """
     if path:
         return Path(path)
     return Path(__file__).parent.joinpath(DEFAULT_FILENAME)
 
 
 def load_tasks(path: Optional[str] = None) -> List[Task]:
+    """Load all tasks from the data file.
+    
+    Handles JSON parsing and corrupted file recovery. If the data file is corrupted,
+    it is automatically backed up with a .bak extension and an empty list is returned.
+    
+    Args:
+        path: Optional custom path to data file. Defaults to tasks.json next to script.
+    
+    Returns:
+        List of Task objects loaded from the data file, or empty list if file doesn't exist
+        or is corrupted.
+    """
     p = data_file_path(path)
     if not p.exists():
         return []
@@ -73,6 +109,14 @@ def load_tasks(path: Optional[str] = None) -> List[Task]:
 
 
 def save_tasks(tasks: List[Task], path: Optional[str] = None) -> None:
+    """Save tasks to the data file.
+    
+    Creates necessary parent directories and writes tasks as formatted JSON.
+    
+    Args:
+        tasks: List of Task objects to save
+        path: Optional custom path to data file. Defaults to tasks.json next to script.
+    """
     p = data_file_path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
@@ -91,6 +135,21 @@ def task_id_exists(task_id: str, path: Optional[str] = None) -> bool:
 
 
 def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None, tags: Optional[List[str]] = None, custom_id: Optional[str] = None, important: bool = False, path: Optional[str] = None) -> Optional[Task]:
+    """Add a new task to the task manager.
+    
+    Args:
+        title: The task title (required)
+        notes: Optional notes or additional details for the task
+        due: Optional due date (user-specified string format, e.g., "2025-11-20")
+        tags: Optional list of tags for categorization and filtering
+        custom_id: Optional custom unique identifier. If omitted, an 8-character hex ID is generated.
+                   Must be unique or the task will not be added.
+        important: If True, mark the task as important (default: False)
+        path: Optional custom path to data file. Defaults to tasks.json next to script.
+    
+    Returns:
+        The newly created Task object, or None if a duplicate custom_id was provided.
+    """
     tasks = load_tasks(path)
     
     # Determine task ID
@@ -119,6 +178,15 @@ def add_task(title: str, notes: Optional[str] = None, due: Optional[str] = None,
 
 
 def find_task(task_id: str, tasks: List[Task]) -> Optional[Task]:
+    """Find a task by ID in a list of tasks.
+    
+    Args:
+        task_id: The ID to search for
+        tasks: List of Task objects to search in
+    
+    Returns:
+        The Task object if found, None otherwise.
+    """
     for t in tasks:
         if t.id == task_id:
             return t
@@ -456,6 +524,24 @@ def pretty_print(tasks: List[Task]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for the CLI.
+    
+    Configures all available commands and their arguments, including:
+    - add: Create new tasks with optional metadata
+    - list: List tasks with filtering and sorting options
+    - search: Search by keyword
+    - show: Display a single task's details
+    - link: Create task relationships
+    - tags: List tag usage statistics
+    - search-tags: Find tasks by tag(s) with ANY/ALL matching
+    - important: List flagged tasks
+    - mark-important/unmark-important: Toggle importance flag
+    - add-subtask/show-subtasks: Manage task hierarchies
+    - delete: Remove tasks with subtask handling options
+    
+    Returns:
+        Configured ArgumentParser instance.
+    """
     # Use the actual script filename as the program name in help/usage
     parser = argparse.ArgumentParser(prog=Path(__file__).name, description="Simple JSON-backed task manager (stored in prototype_pkms.py)")
     parser.add_argument("--data", help="Path to JSON data file (defaults to tasks.json next to script)")
@@ -512,6 +598,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """Main entry point for the tasks3 CLI.
+    
+    Parses command-line arguments and dispatches to appropriate command handlers.
+    
+    Args:
+        argv: Optional list of command-line arguments. If None, sys.argv is used.
+    
+    Returns:
+        Exit code:
+          0 - Command executed successfully
+          1 - No command provided or user cancelled operation
+          2 - Command failed (task not found, ID conflict, etc.)
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
