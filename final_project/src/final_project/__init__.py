@@ -673,8 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
     Returns:
         Configured ArgumentParser instance.
     """
-    # Use the actual script filename as the program name in help/usage
-    parser = argparse.ArgumentParser(prog=Path(__file__).name, description="Simple JSON-backed task manager (stored in prototype_pkms.py)")
+    # Use final_project as the program name in help/usage
+    parser = argparse.ArgumentParser(prog="final_project", description="Simple JSON-backed task manager with AI chat support")
     parser.add_argument("--data", help="Path to JSON data file (defaults to tasks.json next to script)")
     sub = parser.add_subparsers(dest="cmd")
 
