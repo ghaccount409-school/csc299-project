@@ -727,6 +727,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ai_chat = sub.add_parser("ai-chat", help="Interactive AI chat for task summarization (requires openai package)")
 
+    p_ai_summarize = sub.add_parser("ai-summarize", help="Summarize existing task(s) using AI (requires openai package)")
+    p_ai_summarize.add_argument("task_id", nargs="?", help="ID of specific task to summarize (optional, summarizes all if omitted)")
+    p_ai_summarize.add_argument("--update", action="store_true", help="Update task notes with AI summary")
+
     return parser
 
 
@@ -857,6 +861,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Launch the AI chat interface
         return openai_chat_loop()
 
+    if args.cmd == "ai-summarize":
+        # Summarize existing task(s) with AI
+        return ai_summarize_tasks(
+            task_id=args.task_id,
+            update=args.update,
+            path=data_path
+        )
+
     parser.print_help()
     return 2
 
@@ -881,6 +893,119 @@ def _check_api_key() -> bool:
     print("\nGet a key from: https://platform.openai.com/api/keys")
     sys.stdout.flush()
     return False
+
+
+def _get_ai_summary(text: str, client) -> Optional[str]:
+    """Get AI summary for a given text using OpenAI.
+    
+    Args:
+        text (str): Text to summarize.
+        client: OpenAI client instance.
+    
+    Returns:
+        Optional[str]: Summary text or None if error occurs.
+    """
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": DEVELOPER_ROLE},
+                {
+                    "role": "user",
+                    "content": f"Summarize this task as a short phrase: {text}"
+                }
+            ],
+            max_completion_tokens=50,
+            timeout=30.0,
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error getting AI summary: {type(e).__name__}: {e}", file=sys.stderr)
+        return None
+
+
+def ai_summarize_tasks(
+    task_id: Optional[str] = None,
+    update: bool = False,
+    path: Optional[str] = None
+) -> int:
+    """Summarize existing task(s) using OpenAI.
+    
+    Args:
+        task_id (Optional[str]): ID of specific task to summarize. If None,
+            summarizes all tasks.
+        update (bool): If True, update task notes with the AI summary.
+        path (Optional[str]): Path to data file.
+    
+    Returns:
+        int: Exit code (0 for success, 1 for error).
+    """
+    # Import OpenAI only when this function is called
+    try:
+        from openai import OpenAI
+    except ImportError:
+        print("ERROR: openai package is not installed!")
+        print("Install it with: pip install openai")
+        return 1
+    
+    if not _check_api_key():
+        return 1
+    
+    # Initialize OpenAI client
+    client = OpenAI()
+    
+    # Load tasks
+    tasks = load_tasks(path)
+    
+    if not tasks:
+        print("No tasks found.")
+        return 0
+    
+    # Filter to specific task if requested
+    if task_id:
+        task = find_task(task_id, tasks)
+        if not task:
+            print(f"Task {task_id} not found.")
+            return 2
+        tasks_to_summarize = [task]
+    else:
+        tasks_to_summarize = tasks
+    
+    # Summarize each task
+    updated_count = 0
+    for task in tasks_to_summarize:
+        # Create description from task title and notes
+        if task.notes:
+            description = f"{task.title}. {task.notes}"
+        else:
+            description = task.title
+        
+        print(f"\nTask [{task.id}]: {task.title}")
+        print(f"Original: {description}")
+        print("Generating summary...", end=" ", flush=True)
+        
+        summary = _get_ai_summary(description, client)
+        
+        if summary:
+            print(f"\nSummary: {summary}")
+            
+            if update:
+                # Update task notes with summary (append to existing notes)
+                if task.notes:
+                    task.notes = f"{task.notes}\n\nAI Summary: {summary}"
+                else:
+                    task.notes = f"AI Summary: {summary}"
+                updated_count += 1
+        else:
+            print("Failed to generate summary.")
+    
+    # Save updated tasks if requested
+    if update and updated_count > 0:
+        save_tasks(tasks, path)
+        print(f"\n✓ Updated {updated_count} task(s) with AI summaries.")
+    
+    return 0
+
 
 def openai_chat_loop() -> int:
     """Interactive AI chat loop for task description summarization.

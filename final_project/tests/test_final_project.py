@@ -33,6 +33,8 @@ from final_project import (
     add_subtask,
     show_subtasks,
     delete_task,
+    ai_summarize_tasks,
+    _get_ai_summary,
 )
 
 
@@ -465,4 +467,256 @@ def test_delete_task_with_subtasks_no(datafile):
 	assert len(tasks) == 2
 	ids = {t.id for t in tasks}
 	assert ids == {sub1.id, sub2.id}
+
+
+# =============================================================================
+# AI Summarization Tests
+# =============================================================================
+
+def test_ai_summarize_tasks_no_openai_package(datafile, monkeypatch):
+	"""Test ai_summarize_tasks when openai package is not available."""
+	# Mock the import to raise ImportError
+	import builtins
+	real_import = builtins.__import__
+	
+	def mock_import(name, *args, **kwargs):
+		if name == "openai":
+			raise ImportError("No module named 'openai'")
+		return real_import(name, *args, **kwargs)
+	
+	monkeypatch.setattr(builtins, "__import__", mock_import)
+	
+	# Add a task
+	add_task("Test task", path=datafile)
+	
+	# Try to summarize without openai package
+	result = ai_summarize_tasks(path=datafile)
+	assert result == 1  # Should return error code
+
+
+def test_ai_summarize_tasks_no_api_key(datafile, monkeypatch):
+	"""Test ai_summarize_tasks when OPENAI_API_KEY is not set."""
+	# Remove API key from environment
+	monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+	
+	# Add a task
+	add_task("Test task", path=datafile)
+	
+	# Try to summarize without API key
+	result = ai_summarize_tasks(path=datafile)
+	assert result == 1  # Should return error code
+
+
+def test_ai_summarize_tasks_no_tasks(datafile, monkeypatch):
+	"""Test ai_summarize_tasks when there are no tasks."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Try to summarize with no tasks
+	result = ai_summarize_tasks(path=datafile)
+	assert result == 0  # Should return success (nothing to do)
+
+
+def test_ai_summarize_tasks_task_not_found(datafile, monkeypatch):
+	"""Test ai_summarize_tasks with non-existent task ID."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Add a task
+	add_task("Test task", path=datafile)
+	
+	# Try to summarize non-existent task
+	result = ai_summarize_tasks(task_id="nonexistent", path=datafile)
+	assert result == 2  # Should return error code
+
+
+def test_ai_summarize_tasks_with_mock_client(datafile, monkeypatch):
+	"""Test ai_summarize_tasks with mocked OpenAI client."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Create mock OpenAI client and response
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Test summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = MockChat()
+	
+	# Mock the OpenAI import
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Add tasks
+	task1 = add_task("Task 1", notes="This is a detailed description", path=datafile)
+	task2 = add_task("Task 2", path=datafile)
+	
+	# Test summarizing all tasks (no update)
+	result = ai_summarize_tasks(path=datafile, update=False)
+	assert result == 0
+	
+	# Verify tasks were not updated
+	tasks = load_tasks(path=datafile)
+	task1_updated = [t for t in tasks if t.id == task1.id][0]
+	assert "AI Summary" not in (task1_updated.notes or "")
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_ai_summarize_tasks_with_update(datafile, monkeypatch):
+	"""Test ai_summarize_tasks with --update flag."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Create mock OpenAI client
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Concise task summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = MockChat()
+	
+	# Mock the OpenAI import
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Add task with notes
+	task = add_task("Long task title", notes="Detailed description here", path=datafile)
+	
+	# Summarize with update flag
+	result = ai_summarize_tasks(task_id=task.id, update=True, path=datafile)
+	assert result == 0
+	
+	# Verify task was updated with AI summary
+	tasks = load_tasks(path=datafile)
+	updated_task = [t for t in tasks if t.id == task.id][0]
+	assert "AI Summary: Concise task summary" in updated_task.notes
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_ai_summarize_specific_task(datafile, monkeypatch):
+	"""Test ai_summarize_tasks for a specific task ID."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Create mock OpenAI client
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Specific task summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = MockChat()
+	
+	# Mock the OpenAI import
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Add multiple tasks
+	task1 = add_task("Task 1", path=datafile)
+	task2 = add_task("Task 2", path=datafile)
+	task3 = add_task("Task 3", path=datafile)
+	
+	# Summarize only task2 with update
+	result = ai_summarize_tasks(task_id=task2.id, update=True, path=datafile)
+	assert result == 0
+	
+	# Verify only task2 was updated
+	tasks = load_tasks(path=datafile)
+	task1_updated = [t for t in tasks if t.id == task1.id][0]
+	task2_updated = [t for t in tasks if t.id == task2.id][0]
+	task3_updated = [t for t in tasks if t.id == task3.id][0]
+	
+	assert "AI Summary" not in (task1_updated.notes or "")
+	assert "AI Summary: Specific task summary" in task2_updated.notes
+	assert "AI Summary" not in (task3_updated.notes or "")
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_get_ai_summary_helper_with_mock(monkeypatch):
+	"""Test _get_ai_summary helper function with mocked client."""
+	# Create mock client
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Helper summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockClient:
+		def __init__(self):
+			self.chat = MockChat()
+	
+	client = MockClient()
+	
+	# Test the helper function
+	summary = _get_ai_summary("Test task description", client)
+	assert summary == "Helper summary"
+
+
+def test_get_ai_summary_error_handling(monkeypatch):
+	"""Test _get_ai_summary error handling."""
+	# Create mock client that raises exception
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			raise Exception("API Error")
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockClient:
+		def __init__(self):
+			self.chat = MockChat()
+	
+	client = MockClient()
+	
+	# Test error handling
+	summary = _get_ai_summary("Test task", client)
+	assert summary is None  # Should return None on error
 
