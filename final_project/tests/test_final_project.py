@@ -35,6 +35,7 @@ from final_project import (
     delete_task,
     ai_summarize_tasks,
     _get_ai_summary,
+    openai_chat_loop,
 )
 
 
@@ -719,4 +720,151 @@ def test_get_ai_summary_error_handling(monkeypatch):
 	# Test error handling
 	summary = _get_ai_summary("Test task", client)
 	assert summary is None  # Should return None on error
+
+
+def test_openai_chat_loop_quit(monkeypatch):
+	"""Test that openai_chat_loop returns 0 when user types 'quit'."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Mock the OpenAI client
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Test summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = MockChat()
+	
+	# Mock the OpenAI import
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Mock input to simulate user typing 'quit'
+	monkeypatch.setattr('builtins.input', lambda _: 'quit')
+	
+	# Test that openai_chat_loop returns 0 when user quits
+	result = openai_chat_loop()
+	assert result == 0
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_openai_chat_loop_no_openai_package(monkeypatch):
+	"""Test openai_chat_loop when openai package is not available."""
+	# Mock the import to raise ImportError
+	import builtins
+	real_import = builtins.__import__
+	
+	def mock_import(name, *args, **kwargs):
+		if name == "openai":
+			raise ImportError("No module named 'openai'")
+		return real_import(name, *args, **kwargs)
+	
+	monkeypatch.setattr(builtins, "__import__", mock_import)
+	
+	# Try to run without openai package
+	result = openai_chat_loop()
+	assert result == 1  # Should return error code
+
+
+def test_openai_chat_loop_no_api_key(monkeypatch):
+	"""Test openai_chat_loop when OPENAI_API_KEY is not set."""
+	# Remove API key from environment
+	monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+	
+	# Mock OpenAI to be available
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = lambda **kwargs: None
+	sys.modules['openai'] = mock_openai
+	
+	# Try to run without API key
+	result = openai_chat_loop()
+	assert result == 1  # Should return error code
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_openai_chat_loop_eof(monkeypatch):
+	"""Test openai_chat_loop handles EOF gracefully."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Mock OpenAI client
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = None
+	
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Mock input to raise EOFError
+	def mock_input(_):
+		raise EOFError()
+	monkeypatch.setattr('builtins.input', mock_input)
+	
+	# Test that openai_chat_loop handles EOF and returns 0
+	result = openai_chat_loop()
+	assert result == 0
+	
+	# Clean up
+	del sys.modules['openai']
+
+
+def test_openai_chat_loop_empty_input(monkeypatch):
+	"""Test openai_chat_loop handles empty input correctly."""
+	# Set a fake API key
+	monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-testing")
+	
+	# Mock OpenAI client
+	class MockCompletion:
+		def __init__(self):
+			self.choices = [type('obj', (object,), {'message': type('obj', (object,), {'content': 'Summary'})()})]
+	
+	class MockChatCompletions:
+		def create(self, **kwargs):
+			return MockCompletion()
+	
+	class MockChat:
+		def __init__(self):
+			self.completions = MockChatCompletions()
+	
+	class MockOpenAI:
+		def __init__(self, **kwargs):
+			self.chat = MockChat()
+	
+	import sys
+	import types
+	mock_openai = types.ModuleType('openai')
+	mock_openai.OpenAI = MockOpenAI
+	sys.modules['openai'] = mock_openai
+	
+	# Mock input to return empty string, then 'quit'
+	input_values = iter(['', 'quit'])
+	monkeypatch.setattr('builtins.input', lambda _: next(input_values))
+	
+	# Test that it prompts again after empty input, then quits
+	result = openai_chat_loop()
+	assert result == 0
+	
+	# Clean up
+	del sys.modules['openai']
 

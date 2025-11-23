@@ -859,7 +859,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.cmd == "ai-chat":
         # Launch the AI chat interface
-        return openai_chat_loop()
+        result = openai_chat_loop()
+        # After exiting ai-chat, show help menu
+        if result == 0:
+            print("\n\033[94m" + "="*70 + "\033[0m")
+            parser.print_help()
+        return result
 
     if args.cmd == "ai-summarize":
         # Summarize existing task(s) with AI
@@ -1043,8 +1048,8 @@ def openai_chat_loop() -> int:
             break
 
         if task_description.lower() == "quit":
-            print("Goodbye!")
-            break
+            print("Returning to main menu...")
+            return 0
         
         if not task_description:
             print("Please enter a task description.")
@@ -1054,7 +1059,7 @@ def openai_chat_loop() -> int:
         sys.stdout.flush()
         
         try:
-            # Call OpenAI API with example context for better summarization
+            # Call OpenAI API to summarize the user's task description
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -1064,69 +1069,6 @@ def openai_chat_loop() -> int:
                         "content": (
                             f"Summarize this task as a short phrase: "
                             f"{task_description}"
-                        )
-                    },
-                    # Example 1: Camping trip planning
-                    {
-                        "role": "user",
-                        "content": (
-                            "Planning a successful camping trip requires careful "
-                            "preparation and attention to multiple details. You must "
-                            "first research and select an appropriate campsite, "
-                            "considering factors like proximity to water sources, "
-                            "terrain difficulty, weather forecasts, and permit "
-                            "requirements. Next comes assembling essential gear "
-                            "including a tent, sleeping bags rated for expected "
-                            "temperatures, cooking equipment, food storage containers, "
-                            "and navigation tools like maps or GPS devices. Safety "
-                            "preparations involve packing a first aid kit, informing "
-                            "someone of your itinerary, checking for wildlife "
-                            "advisories, and understanding leave-no-trace principles "
-                            "to minimize environmental impact. Finally, meal planning "
-                            "should account for nutritional needs, weight constraints, "
-                            "and proper food storage techniques to prevent attracting "
-                            "animals while ensuring you have adequate sustenance for "
-                            "the duration of your outdoor adventure."
-                        )
-                    },
-                    # Example 2: Bicycle restoration
-                    {
-                        "role": "user",
-                        "content": (
-                            "Restoring a vintage bicycle requires patience, mechanical "
-                            "skills, and attention to detail across several phases. "
-                            "Begin by thoroughly cleaning the frame to assess its "
-                            "condition, identifying rust spots, dents, or cracks that "
-                            "need addressing. Disassemble all components systematically, "
-                            "photographing each step to aid reassembly, and organize "
-                            "hardware in labeled containers. The frame may need "
-                            "sandblasting or chemical stripping to remove old paint, "
-                            "followed by rust treatment, primer application, and fresh "
-                            "paint or powder coating in your chosen color scheme. "
-                            "Overhauling components involves rebuilding wheel hubs with "
-                            "new bearings, replacing worn brake pads and cables, "
-                            "servicing or replacing the bottom bracket and headset, and "
-                            "cleaning or upgrading the drivetrain. Final assembly "
-                            "requires careful adjustment of brakes, derailleurs, and "
-                            "wheel alignment, followed by a test ride to ensure smooth "
-                            "operation and safety before the restored bicycle is ready "
-                            "for the road."
-                        )
-                    },
-                    # Instruction for generating additional example
-                    {
-                        "role": "user",
-                        "content": (
-                            "Generate a paragraph of useful information for an "
-                            "unrelated topic. Do not use em-dashes."
-                        )
-                    },
-                    # Final summarization instruction
-                    {
-                        "role": "user",
-                        "content": (
-                            "Summarize each of the three paragraphs as individual "
-                            "short phrases."
                         )
                     }
                 ],
