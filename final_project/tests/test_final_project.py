@@ -36,6 +36,21 @@ from final_project import (
     ai_summarize_tasks,
     _get_ai_summary,
     openai_chat_loop,
+    # PKM functions
+    create_note,
+    list_notes,
+    search_notes,
+    show_note,
+    edit_note,
+    delete_note,
+    link_note_to_note,
+    link_note_to_task,
+    load_notes,
+    save_notes,
+    note_id_exists,
+    pretty_print_notes,
+    export_note_to_markdown,
+    export_all_notes_to_markdown,
 )
 
 
@@ -133,7 +148,7 @@ def test_linking_and_show(datafile):
 	# linked tasks and the view command should appear in the listing for the parent
 	assert "Linked tasks:" in out
 	assert b.id in out
-	assert f"python prototype_pkms.py show {b.id}" in out
+	assert f"python -m final_project show {b.id}" in out
 
 def test_short_id_generation(datafile):
 	"""Test that short IDs are 8-character hex strings."""
@@ -867,4 +882,667 @@ def test_openai_chat_loop_empty_input(monkeypatch):
 	
 	# Clean up
 	del sys.modules['openai']
+
+
+# =============================================================================
+# PKM (Personal Knowledge Management) Tests
+# =============================================================================
+
+@pytest.fixture
+def notesfile():
+	"""Create a temporary notes data file for testing."""
+	tmpdir = tempfile.TemporaryDirectory()
+	notesfile_path = os.path.join(tmpdir.name, "notes.json")
+	yield notesfile_path
+	tmpdir.cleanup()
+
+
+def test_create_and_list_notes(notesfile):
+	"""Test basic note creation and listing."""
+	note1 = create_note("My First Note", content="This is the content", path=notesfile)
+	assert note1 is not None
+	assert note1.title == "My First Note"
+	assert note1.content == "This is the content"
+	assert note1.id
+	
+	note2 = create_note("Second Note", content="More content", tags=["test"], path=notesfile)
+	assert note2 is not None
+	
+	notes = list_notes(path=notesfile)
+	assert len(notes) == 2
+	assert any(n.title == "My First Note" for n in notes)
+	assert any(n.title == "Second Note" for n in notes)
+
+
+def test_create_note_with_custom_id(notesfile):
+	"""Test creating a note with custom ID."""
+	note = create_note("Custom ID Note", content="Content", custom_id="custom123", path=notesfile)
+	assert note is not None
+	assert note.id == "custom123"
+	
+	# Try to create another note with same ID
+	duplicate = create_note("Duplicate", custom_id="custom123", path=notesfile)
+	assert duplicate is None
+
+
+def test_note_timestamps(notesfile):
+	"""Test that notes have proper timestamps."""
+	note = create_note("Timestamped Note", content="Content", path=notesfile)
+	assert note.created_at
+	assert note.updated_at
+	assert note.created_at == note.updated_at
+
+
+def test_search_notes(notesfile):
+	"""Test searching notes by keyword."""
+	create_note("Python Tutorial", content="Learn Python programming", path=notesfile)
+	create_note("JavaScript Guide", content="Web development with JS", path=notesfile)
+	create_note("Python Advanced", content="Advanced Python concepts", path=notesfile)
+	
+	# Search in title
+	results = search_notes("Python", path=notesfile)
+	assert len(results) == 2
+	
+	# Search in content
+	results = search_notes("Web", path=notesfile)
+	assert len(results) == 1
+	assert results[0].title == "JavaScript Guide"
+	
+	# Case insensitive search
+	results = search_notes("python", path=notesfile)
+	assert len(results) == 2
+
+
+def test_list_notes_with_tag_filter(notesfile):
+	"""Test filtering notes by tag."""
+	create_note("Work Note", tags=["work", "important"], path=notesfile)
+	create_note("Personal Note", tags=["personal"], path=notesfile)
+	create_note("Another Work Note", tags=["work"], path=notesfile)
+	
+	# Filter by work tag
+	work_notes = list_notes(tag="work", path=notesfile)
+	assert len(work_notes) == 2
+	
+	# Filter by personal tag
+	personal_notes = list_notes(tag="personal", path=notesfile)
+	assert len(personal_notes) == 1
+	
+	# Filter by non-existent tag
+	no_notes = list_notes(tag="nonexistent", path=notesfile)
+	assert len(no_notes) == 0
+
+
+def test_edit_note(notesfile):
+	"""Test editing note title, content, and tags."""
+	import time
+	
+	note = create_note("Original Title", content="Original content", tags=["old"], path=notesfile)
+	original_created_at = note.created_at
+	original_updated_at = note.updated_at
+	
+	# Sleep briefly to ensure timestamp difference
+	time.sleep(0.01)
+	
+	# Edit title
+	ok = edit_note(note.id, title="New Title", path=notesfile)
+	assert ok is True
+	
+	updated_notes = load_notes(path=notesfile)
+	updated = next(n for n in updated_notes if n.id == note.id)
+	assert updated.title == "New Title"
+	assert updated.content == "Original content"  # Content unchanged
+	assert updated.created_at == original_created_at  # Created time unchanged
+	# Just verify updated_at exists and is a valid timestamp
+	assert updated.updated_at
+	
+	# Edit content
+	time.sleep(0.01)
+	ok = edit_note(note.id, content="New content", path=notesfile)
+	assert ok is True
+	
+	updated_notes = load_notes(path=notesfile)
+	updated = next(n for n in updated_notes if n.id == note.id)
+	assert updated.content == "New content"
+	
+	# Edit tags
+	time.sleep(0.01)
+	ok = edit_note(note.id, tags=["new", "updated"], path=notesfile)
+	assert ok is True
+	
+	updated_notes = load_notes(path=notesfile)
+	updated = next(n for n in updated_notes if n.id == note.id)
+	assert updated.tags == ["new", "updated"]
+
+
+def test_edit_nonexistent_note(notesfile):
+	"""Test editing a note that doesn't exist."""
+	ok = edit_note("nonexistent", title="New Title", path=notesfile)
+	assert ok is False
+
+
+def test_delete_note(notesfile):
+	"""Test deleting a note."""
+	note1 = create_note("Note 1", path=notesfile)
+	note2 = create_note("Note 2", path=notesfile)
+	
+	notes = list_notes(path=notesfile)
+	assert len(notes) == 2
+	
+	# Delete first note
+	ok = delete_note(note1.id, path=notesfile)
+	assert ok is True
+	
+	notes = list_notes(path=notesfile)
+	assert len(notes) == 1
+	assert notes[0].id == note2.id
+	
+	# Try to delete non-existent note
+	ok = delete_note("nonexistent", path=notesfile)
+	assert ok is False
+
+
+def test_link_note_to_note(notesfile):
+	"""Test linking notes together."""
+	note1 = create_note("Note 1", path=notesfile)
+	note2 = create_note("Note 2", path=notesfile)
+	note3 = create_note("Note 3", path=notesfile)
+	
+	# Link note1 to note2
+	ok = link_note_to_note(note1.id, note2.id, path=notesfile)
+	assert ok is True
+	
+	notes = load_notes(path=notesfile)
+	note1_updated = next(n for n in notes if n.id == note1.id)
+	assert note2.id in note1_updated.linked_notes
+	
+	# Link note1 to note3
+	ok = link_note_to_note(note1.id, note3.id, path=notesfile)
+	assert ok is True
+	
+	notes = load_notes(path=notesfile)
+	note1_updated = next(n for n in notes if n.id == note1.id)
+	assert note2.id in note1_updated.linked_notes
+	assert note3.id in note1_updated.linked_notes
+	assert len(note1_updated.linked_notes) == 2
+
+
+def test_link_note_to_note_prevents_duplicates(notesfile):
+	"""Test that linking the same note twice doesn't create duplicates."""
+	note1 = create_note("Note 1", path=notesfile)
+	note2 = create_note("Note 2", path=notesfile)
+	
+	# Link twice
+	link_note_to_note(note1.id, note2.id, path=notesfile)
+	link_note_to_note(note1.id, note2.id, path=notesfile)
+	
+	notes = load_notes(path=notesfile)
+	note1_updated = next(n for n in notes if n.id == note1.id)
+	assert note1_updated.linked_notes.count(note2.id) == 1
+
+
+def test_link_note_to_note_nonexistent(notesfile):
+	"""Test linking to non-existent notes."""
+	note1 = create_note("Note 1", path=notesfile)
+	
+	# Try to link to non-existent target
+	ok = link_note_to_note(note1.id, "nonexistent", path=notesfile)
+	assert ok is False
+	
+	# Try to link from non-existent source
+	ok = link_note_to_note("nonexistent", note1.id, path=notesfile)
+	assert ok is False
+
+
+def test_link_note_to_task(notesfile, datafile):
+	"""Test linking notes to tasks."""
+	# Create a task
+	task = add_task("Test Task", path=datafile)
+	
+	# Create a note
+	note = create_note("Note about task", path=notesfile)
+	
+	# Link note to task
+	ok = link_note_to_task(note.id, task.id, notes_path=notesfile, tasks_path=datafile)
+	assert ok is True
+	
+	notes = load_notes(path=notesfile)
+	note_updated = next(n for n in notes if n.id == note.id)
+	assert task.id in note_updated.linked_tasks
+
+
+def test_link_note_to_nonexistent_task(notesfile, datafile):
+	"""Test linking note to non-existent task."""
+	note = create_note("Note", path=notesfile)
+	
+	ok = link_note_to_task(note.id, "nonexistent_task", notes_path=notesfile, tasks_path=datafile)
+	assert ok is False
+
+
+def test_link_nonexistent_note_to_task(notesfile, datafile):
+	"""Test linking non-existent note to task."""
+	task = add_task("Test Task", path=datafile)
+	
+	ok = link_note_to_task("nonexistent_note", task.id, notes_path=notesfile, tasks_path=datafile)
+	assert ok is False
+
+
+def test_delete_note_removes_references(notesfile):
+	"""Test that deleting a note removes references from other notes."""
+	note1 = create_note("Note 1", path=notesfile)
+	note2 = create_note("Note 2", path=notesfile)
+	note3 = create_note("Note 3", path=notesfile)
+	
+	# Link note2 and note3 to note1
+	link_note_to_note(note2.id, note1.id, path=notesfile)
+	link_note_to_note(note3.id, note1.id, path=notesfile)
+	
+	# Verify links exist
+	notes = load_notes(path=notesfile)
+	note2_before = next(n for n in notes if n.id == note2.id)
+	note3_before = next(n for n in notes if n.id == note3.id)
+	assert note1.id in note2_before.linked_notes
+	assert note1.id in note3_before.linked_notes
+	
+	# Delete note1
+	delete_note(note1.id, path=notesfile)
+	
+	# Verify references are removed
+	notes = load_notes(path=notesfile)
+	note2_after = next(n for n in notes if n.id == note2.id)
+	note3_after = next(n for n in notes if n.id == note3.id)
+	assert note1.id not in note2_after.linked_notes
+	assert note1.id not in note3_after.linked_notes
+
+
+def test_note_id_exists(notesfile):
+	"""Test checking if note ID exists."""
+	note = create_note("Test Note", custom_id="test123", path=notesfile)
+	
+	assert note_id_exists("test123", path=notesfile) is True
+	assert note_id_exists("nonexistent", path=notesfile) is False
+
+
+def test_load_notes_empty_file(notesfile):
+	"""Test loading notes when file doesn't exist."""
+	notes = load_notes(path=notesfile)
+	assert notes == []
+
+
+def test_load_notes_corrupted_file(notesfile):
+	"""Test loading notes with corrupted JSON."""
+	# Create corrupted file
+	with open(notesfile, 'w') as f:
+		f.write("corrupted json data {")
+	
+	# Should handle corruption gracefully
+	notes = load_notes(path=notesfile)
+	assert notes == []
+	
+	# Verify backup was created
+	backup_path = notesfile + ".bak"
+	assert os.path.exists(backup_path)
+
+
+def test_save_and_load_notes(notesfile):
+	"""Test saving and loading notes."""
+	from final_project import Note
+	from datetime import datetime
+	
+	now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+	notes = [
+		Note(id="1", title="Note 1", content="Content 1", created_at=now, updated_at=now, tags=["tag1"], linked_notes=[], linked_tasks=[]),
+		Note(id="2", title="Note 2", content="Content 2", created_at=now, updated_at=now, tags=["tag2"], linked_notes=["1"], linked_tasks=[])
+	]
+	
+	save_notes(notes, path=notesfile)
+	
+	loaded = load_notes(path=notesfile)
+	assert len(loaded) == 2
+	assert loaded[0].id == "1"
+	assert loaded[0].title == "Note 1"
+	assert loaded[1].id == "2"
+	assert loaded[1].linked_notes == ["1"]
+
+
+def test_pretty_print_notes(notesfile, capsys):
+	"""Test pretty printing notes."""
+	note1 = create_note("Short Note", content="Brief", tags=["test"], path=notesfile)
+	note2 = create_note("Long Note", content="A" * 100, path=notesfile)
+	note3 = create_note("Linked Note", path=notesfile)
+	
+	# Link note3 to note1
+	link_note_to_note(note3.id, note1.id, path=notesfile)
+	
+	notes = list_notes(path=notesfile)
+	pretty_print_notes(notes)
+	
+	captured = capsys.readouterr()
+	assert "Short Note" in captured.out
+	assert "Long Note" in captured.out
+	assert "[test]" in captured.out  # Tags shown
+	assert "..." in captured.out  # Long content truncated
+
+
+def test_pretty_print_notes_empty(notesfile, capsys):
+	"""Test pretty printing empty notes list."""
+	pretty_print_notes([])
+	
+	captured = capsys.readouterr()
+	assert "No notes found" in captured.out
+
+
+def test_note_with_markdown_content(notesfile):
+	"""Test notes with markdown content."""
+	markdown_content = """# Heading
+
+## Subheading
+
+- List item 1
+- List item 2
+
+**Bold text** and *italic text*
+
+```python
+print('code block')
+```
+"""
+	note = create_note("Markdown Note", content=markdown_content, path=notesfile)
+	assert note is not None
+	
+	notes = load_notes(path=notesfile)
+	loaded = next(n for n in notes if n.id == note.id)
+	assert loaded.content == markdown_content
+
+
+def test_note_multiple_links(notesfile, datafile):
+	"""Test note with multiple linked notes and tasks."""
+	task1 = add_task("Task 1", path=datafile)
+	task2 = add_task("Task 2", path=datafile)
+	
+	note1 = create_note("Main Note", path=notesfile)
+	note2 = create_note("Related Note 1", path=notesfile)
+	note3 = create_note("Related Note 2", path=notesfile)
+	
+	# Link to multiple notes
+	link_note_to_note(note1.id, note2.id, path=notesfile)
+	link_note_to_note(note1.id, note3.id, path=notesfile)
+	
+	# Link to multiple tasks
+	link_note_to_task(note1.id, task1.id, notes_path=notesfile, tasks_path=datafile)
+	link_note_to_task(note1.id, task2.id, notes_path=notesfile, tasks_path=datafile)
+	
+	notes = load_notes(path=notesfile)
+	main_note = next(n for n in notes if n.id == note1.id)
+	
+	assert len(main_note.linked_notes) == 2
+	assert note2.id in main_note.linked_notes
+	assert note3.id in main_note.linked_notes
+	
+	assert len(main_note.linked_tasks) == 2
+	assert task1.id in main_note.linked_tasks
+	assert task2.id in main_note.linked_tasks
+
+
+# =============================================================================
+# Markdown Export Tests
+# =============================================================================
+
+def test_export_note_to_markdown(notesfile):
+	"""Test exporting a single note to markdown file."""
+	note = create_note("Test Note", content="This is the content", tags=["test"], path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "test_note.md")
+		ok = export_note_to_markdown(note.id, output_path, notes_path=notesfile)
+		assert ok is True
+		
+		# Verify file was created
+		assert os.path.exists(output_path)
+		
+		# Read and verify content
+		with open(output_path, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		assert "# Test Note" in content
+		assert note.id in content
+		assert "This is the content" in content
+		assert "`test`" in content
+
+
+def test_export_note_to_markdown_auto_filename(notesfile):
+	"""Test exporting note with auto-generated filename."""
+	note = create_note("My Test Note", content="Content", path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		# Change to temp directory for auto filename
+		import os
+		old_cwd = os.getcwd()
+		try:
+			os.chdir(tmpdir)
+			ok = export_note_to_markdown(note.id, notes_path=notesfile)
+			assert ok is True
+			
+			# Check that file was created with sanitized name
+			expected_file = "My_Test_Note.md"
+			assert os.path.exists(expected_file)
+		finally:
+			os.chdir(old_cwd)
+
+
+def test_export_note_with_links(notesfile):
+	"""Test exporting note with linked notes."""
+	note1 = create_note("Main Note", content="Main content", path=notesfile)
+	note2 = create_note("Linked Note", content="Linked content", path=notesfile)
+	
+	link_note_to_note(note1.id, note2.id, path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "main.md")
+		ok = export_note_to_markdown(note1.id, output_path, notes_path=notesfile)
+		assert ok is True
+		
+		with open(output_path, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		assert "## Links" in content
+		assert "**Linked Notes:**" in content
+		assert "Linked Note" in content
+		assert note2.id in content
+
+
+def test_export_note_with_task_links(notesfile, datafile):
+	"""Test exporting note with linked tasks."""
+	task = add_task("Test Task", path=datafile)
+	note = create_note("Note with Task", content="Content", path=notesfile)
+	
+	link_note_to_task(note.id, task.id, notes_path=notesfile, tasks_path=datafile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "note.md")
+		ok = export_note_to_markdown(note.id, output_path, notes_path=notesfile)
+		assert ok is True
+		
+		with open(output_path, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		assert "**Linked Tasks:**" in content
+		assert task.id in content
+
+
+def test_export_nonexistent_note(notesfile):
+	"""Test exporting a note that doesn't exist."""
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "test.md")
+		ok = export_note_to_markdown("nonexistent", output_path, notes_path=notesfile)
+		assert ok is False
+		assert not os.path.exists(output_path)
+
+
+def test_export_note_with_markdown_content(notesfile):
+	"""Test that markdown content is preserved in export."""
+	markdown_content = """# Heading
+
+## Subheading
+
+- List item 1
+- List item 2
+
+**Bold** and *italic*
+
+```python
+print('code')
+```
+"""
+	note = create_note("Markdown Note", content=markdown_content, path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "markdown.md")
+		ok = export_note_to_markdown(note.id, output_path, notes_path=notesfile)
+		assert ok is True
+		
+		with open(output_path, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		# Verify markdown is preserved
+		assert "## Subheading" in content
+		assert "- List item 1" in content
+		assert "**Bold**" in content
+		assert "```python" in content
+
+
+def test_export_all_notes_to_markdown(notesfile):
+	"""Test exporting all notes to a directory."""
+	note1 = create_note("First Note", content="Content 1", tags=["tag1"], path=notesfile)
+	note2 = create_note("Second Note", content="Content 2", tags=["tag1", "tag2"], path=notesfile)
+	note3 = create_note("Third Note", content="Content 3", tags=["tag2"], path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_dir = os.path.join(tmpdir, "notes_export")
+		count = export_all_notes_to_markdown(output_dir, notes_path=notesfile)
+		
+		assert count == 3
+		assert os.path.exists(output_dir)
+		
+		# Verify individual note files were created
+		assert os.path.exists(os.path.join(output_dir, "First_Note.md"))
+		assert os.path.exists(os.path.join(output_dir, "Second_Note.md"))
+		assert os.path.exists(os.path.join(output_dir, "Third_Note.md"))
+		
+		# Verify index file was created
+		index_path = os.path.join(output_dir, "INDEX.md")
+		assert os.path.exists(index_path)
+		
+		# Read and verify index content
+		with open(index_path, 'r', encoding='utf-8') as f:
+			index_content = f.read()
+		
+		assert "# Notes Index" in index_content
+		assert "Total notes: 3" in index_content
+		assert "First Note" in index_content
+		assert "Second Note" in index_content
+		assert "Third Note" in index_content
+
+
+def test_export_all_notes_index_by_tags(notesfile):
+	"""Test that index file groups notes by tags."""
+	create_note("Python Note", tags=["python", "programming"], path=notesfile)
+	create_note("JavaScript Note", tags=["javascript", "programming"], path=notesfile)
+	create_note("CSS Note", tags=["css", "design"], path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_dir = os.path.join(tmpdir, "export")
+		export_all_notes_to_markdown(output_dir, notes_path=notesfile)
+		
+		index_path = os.path.join(output_dir, "INDEX.md")
+		with open(index_path, 'r', encoding='utf-8') as f:
+			index_content = f.read()
+		
+		assert "## Notes by Tag" in index_content
+		assert "### python" in index_content or "### css" in index_content
+		assert "### programming" in index_content or "### design" in index_content
+
+
+def test_export_all_notes_empty(notesfile):
+	"""Test exporting when there are no notes."""
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_dir = os.path.join(tmpdir, "empty_export")
+		count = export_all_notes_to_markdown(output_dir, notes_path=notesfile)
+		
+		assert count == 0
+		# Directory is not created when there are no notes
+		assert not os.path.exists(output_dir)
+
+
+def test_export_all_notes_with_links(notesfile):
+	"""Test exporting notes that have links between them."""
+	note1 = create_note("Parent Note", content="Main", path=notesfile)
+	note2 = create_note("Child Note 1", content="Child 1", path=notesfile)
+	note3 = create_note("Child Note 2", content="Child 2", path=notesfile)
+	
+	link_note_to_note(note1.id, note2.id, path=notesfile)
+	link_note_to_note(note1.id, note3.id, path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_dir = os.path.join(tmpdir, "linked_export")
+		count = export_all_notes_to_markdown(output_dir, notes_path=notesfile)
+		
+		assert count == 3
+		
+		# Verify parent note has links in its markdown
+		parent_file = os.path.join(output_dir, "Parent_Note.md")
+		with open(parent_file, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		assert "Child Note 1" in content
+		assert "Child Note 2" in content
+		assert note2.id in content
+		assert note3.id in content
+
+
+def test_export_note_special_characters_in_title(notesfile):
+	"""Test exporting note with special characters in title."""
+	note = create_note("Note: With/Special*Characters?", content="Content", path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_dir = os.path.join(tmpdir, "export")
+		export_all_notes_to_markdown(output_dir, notes_path=notesfile)
+		
+		# Should sanitize filename
+		files = os.listdir(output_dir)
+		md_files = [f for f in files if f.endswith('.md') and f != 'INDEX.md']
+		assert len(md_files) == 1
+		# Verify file can be opened
+		assert os.path.exists(os.path.join(output_dir, md_files[0]))
+
+
+def test_export_note_creates_subdirectories(notesfile):
+	"""Test that export creates necessary subdirectories."""
+	note = create_note("Test", content="Content", path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "nested", "dir", "note.md")
+		ok = export_note_to_markdown(note.id, output_path, notes_path=notesfile)
+		assert ok is True
+		assert os.path.exists(output_path)
+
+
+def test_export_note_metadata_fields(notesfile):
+	"""Test that all metadata fields are included in export."""
+	note = create_note("Meta Test", content="Content", tags=["tag1", "tag2"], path=notesfile)
+	
+	with tempfile.TemporaryDirectory() as tmpdir:
+		output_path = os.path.join(tmpdir, "meta.md")
+		export_note_to_markdown(note.id, output_path, notes_path=notesfile)
+		
+		with open(output_path, 'r', encoding='utf-8') as f:
+			content = f.read()
+		
+		assert "**ID:**" in content
+		assert "**Created:**" in content
+		assert "**Updated:**" in content
+		assert "**Tags:**" in content
+		assert "`tag1`" in content
+		assert "`tag2`" in content
+		assert note.id in content
+		assert note.created_at in content
 

@@ -1,5 +1,5 @@
 """
-tasks3: A JSON-backed task manager CLI with comprehensive task management features.
+final_project: A JSON-backed task manager CLI with comprehensive task management features.
 
 This module provides a complete task management system with support for:
 - Creating, listing, searching, and deleting tasks
@@ -8,26 +8,66 @@ This module provides a complete task management system with support for:
 - Task importance flagging
 - Flexible sorting and filtering options
 - Persistent JSON-based storage
+- AI-powered task summarization (OpenAI integration)
+- Personal Knowledge Management (PKM) system with note documents
 
 Commands:
-  add              - Add a new task (with optional tags, due date, notes)
-  list             - List all tasks (with optional tag filtering and sorting)
-  search           - Search tasks by keyword in title or notes
-  show             - Display details of a single task
-  link             - Link one task to another (task relationships)
-  tags             - List all tags and their usage counts
-  search-tags      - Search tasks by one or more tags (ANY or ALL matching)
-  important        - List tasks marked as important
-  mark-important   - Mark a task as important
-  unmark-important - Unmark a task as important
-  add-subtask      - Link an existing task as a subtask to a parent task
-  show-subtasks    - Display all subtasks for a given parent task
-  delete           - Delete a task (with options for handling subtasks)
+  Task Management:
+    add              - Add a new task (with optional tags, due date, notes)
+    list             - List all tasks (with optional tag filtering and sorting)
+    search           - Search tasks by keyword in title or notes
+    show             - Display details of a single task
+    link             - Link one task to another (task relationships)
+    tags             - List all tags and their usage counts
+    search-tags      - Search tasks by one or more tags (ANY or ALL matching)
+    important        - List tasks marked as important
+    mark-important   - Mark a task as important
+    unmark-important - Unmark a task as important
+    add-subtask      - Link an existing task as a subtask to a parent task
+    show-subtasks    - Display all subtasks for a given parent task
+    delete           - Delete a task (with options for handling subtasks)
+  
+  AI Features:
+    ai-chat          - Interactive AI chat for task description summarization
+    ai-summarize     - Summarize existing task(s) using AI (with optional update)
+  
+  Personal Knowledge Management (PKM):
+    note-create      - Create a new note document
+    note-list        - List all notes (with optional tag filtering)
+    note-search      - Search notes by keyword in title or content
+    note-show        - Display full note details with content
+    note-edit        - Edit an existing note's title, content, or tags
+    note-delete      - Delete a note
+    note-link-note   - Link one note to another note
+    note-link-task   - Link a note to a task
+    note-export      - Export a note to markdown file
+    note-export-all  - Export all notes to markdown files with index
+
+PKM Features:
+  - Markdown support in note content
+  - Link notes together for knowledge graphs
+  - Link notes to tasks for context
+  - Tag-based organization
+  - Full-text search across all notes
+  - Export to markdown files for viewing/sharing
+  - Separate storage from tasks (notes.json)
+
+AI Features:
+  - Interactive chat mode: Get AI-powered summaries for task descriptions
+  - Summarize existing tasks: Process stored tasks through AI for concise summaries
+  - Optional update mode: Add AI summaries directly to task notes
+  - Type 'quit' in ai-chat to return to main menu
 
 Data Storage:
   Default data file: tasks.json next to this script
+  Default notes file: notes.json next to this script
   Use --data FLAG to specify a custom data file path
+  Use --notes-data FLAG to specify a custom notes file path
   Data is stored in JSON format with automatic backup of corrupted files
+
+Requirements:
+  - OpenAI API key (OPENAI_API_KEY environment variable) for AI features
+  - openai Python package for AI features (optional for basic task management)
 """
 from __future__ import annotations
 
@@ -42,6 +82,32 @@ from typing import List, Optional
 
 
 DEFAULT_FILENAME = "tasks.json"
+DEFAULT_NOTES_FILENAME = "notes.json"
+
+
+@dataclass
+class Note:
+    """Represents a note document in the PKM system.
+    
+    Attributes:
+        id (str): Unique identifier for the note (8-char hex string or custom).
+        title (str): The note's title.
+        content (str): The note's content/body (supports markdown).
+        created_at (str): Timestamp when note was created 
+            (UTC format: YYYY-MM-DD HH:MM:SS UTC).
+        updated_at (str): Timestamp when note was last updated.
+        tags (List[str]): Tag strings for categorization.
+        linked_notes (List[str]): Note IDs that this note links to.
+        linked_tasks (List[str]): Task IDs that this note references.
+    """
+    id: str
+    title: str
+    content: str
+    created_at: str
+    updated_at: str
+    tags: List[str] = field(default_factory=list)
+    linked_notes: List[str] = field(default_factory=list)
+    linked_tasks: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -340,7 +406,7 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
     if t.links:
         print("    Linked tasks:")
         for lid in t.links:
-            print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
+            print(f"      - [{lid}] view: python -m final_project show {lid}")
     
     # Display subtask count and view command if there are any
     if getattr(t, 'subtasks', None):
@@ -349,7 +415,7 @@ def show_task(task_id: str, path: Optional[str] = None) -> Optional[Task]:
         if subtask_count > 0:
             print(
                 f"      To view subtasks: "
-                f"python prototype_pkms.py show-subtasks {t.id}"
+                f"python -m final_project show-subtasks {t.id}"
             )
     
     return t
@@ -510,6 +576,468 @@ def sort_tasks(
     return sorted_tasks
 
 
+# =============================================================================
+# Personal Knowledge Management (PKM) Functions
+# =============================================================================
+
+def notes_file_path(path: Optional[str] = None) -> Path:
+    """Get the path to the notes data file.
+    
+    Args:
+        path: Optional custom path to notes file. If not provided, defaults to notes.json
+              in the same directory as this script.
+    
+    Returns:
+        Path object pointing to the notes file location.
+    """
+    if path:
+        return Path(path)
+    return Path(__file__).parent.joinpath(DEFAULT_NOTES_FILENAME)
+
+
+def load_notes(path: Optional[str] = None) -> List[Note]:
+    """Load all notes from the data file.
+    
+    Args:
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        List[Note]: List of all notes.
+    """
+    fpath = notes_file_path(path)
+    if not fpath.exists():
+        return []
+    
+    try:
+        with open(fpath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [Note(**item) for item in data]
+    except (json.JSONDecodeError, TypeError) as e:
+        print(f"WARNING: Corrupted notes file. Backing up to {fpath}.bak", file=sys.stderr)
+        fpath.rename(fpath.with_suffix(".json.bak"))
+        return []
+
+
+def save_notes(notes: List[Note], path: Optional[str] = None) -> None:
+    """Save notes to the data file.
+    
+    Args:
+        notes (List[Note]): List of notes to save.
+        path (Optional[str]): Custom path to notes file.
+    """
+    fpath = notes_file_path(path)
+    fpath.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(fpath, "w", encoding="utf-8") as f:
+        json.dump([asdict(n) for n in notes], f, indent=2, ensure_ascii=False)
+
+
+def note_id_exists(note_id: str, path: Optional[str] = None) -> bool:
+    """Check if a note ID already exists.
+    
+    Args:
+        note_id (str): The note ID to check.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        bool: True if ID exists, False otherwise.
+    """
+    notes = load_notes(path)
+    return any(n.id == note_id for n in notes)
+
+
+def create_note(title: str, content: str = "", tags: Optional[List[str]] = None,
+                custom_id: Optional[str] = None, path: Optional[str] = None) -> Optional[Note]:
+    """Create a new note.
+    
+    Args:
+        title (str): Note title.
+        content (str): Note content (markdown supported).
+        tags (Optional[List[str]]): List of tags.
+        custom_id (Optional[str]): Custom note ID.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        Optional[Note]: Created note or None if ID conflict.
+    """
+    if custom_id and note_id_exists(custom_id, path):
+        print(f"ERROR: Note ID '{custom_id}' already exists.", file=sys.stderr)
+        return None
+    
+    note_id = custom_id if custom_id else generate_short_id()
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    note = Note(
+        id=note_id,
+        title=title,
+        content=content,
+        created_at=now,
+        updated_at=now,
+        tags=tags or [],
+        linked_notes=[],
+        linked_tasks=[]
+    )
+    
+    notes = load_notes(path)
+    notes.append(note)
+    save_notes(notes, path)
+    
+    return note
+
+
+def list_notes(path: Optional[str] = None, tag: Optional[str] = None) -> List[Note]:
+    """List all notes, optionally filtered by tag.
+    
+    Args:
+        path (Optional[str]): Custom path to notes file.
+        tag (Optional[str]): Filter by tag.
+    
+    Returns:
+        List[Note]: List of notes.
+    """
+    notes = load_notes(path)
+    
+    if tag:
+        notes = [n for n in notes if tag in n.tags]
+    
+    return notes
+
+
+def search_notes(query: str, path: Optional[str] = None) -> List[Note]:
+    """Search notes by keyword in title or content.
+    
+    Args:
+        query (str): Search query.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        List[Note]: Matching notes.
+    """
+    notes = load_notes(path)
+    query_lower = query.lower()
+    
+    return [n for n in notes if query_lower in n.title.lower() or 
+            query_lower in n.content.lower()]
+
+
+def show_note(note_id: str, path: Optional[str] = None) -> None:
+    """Display a note's full details.
+    
+    Args:
+        note_id (str): Note ID to display.
+        path (Optional[str]): Custom path to notes file.
+    """
+    notes = load_notes(path)
+    note = next((n for n in notes if n.id == note_id), None)
+    
+    if not note:
+        print(f"Note {note_id} not found.")
+        return
+    
+    print(f"\n{'='*70}")
+    print(f"Note: {note.title}")
+    print(f"ID: {note.id}")
+    print(f"Created: {note.created_at}")
+    print(f"Updated: {note.updated_at}")
+    
+    if note.tags:
+        print(f"Tags: {', '.join(note.tags)}")
+    
+    if note.linked_notes:
+        print(f"Linked Notes: {', '.join(note.linked_notes)}")
+    
+    if note.linked_tasks:
+        print(f"Linked Tasks: {', '.join(note.linked_tasks)}")
+    
+    print(f"\n{'-'*70}")
+    print(note.content)
+    print(f"{'='*70}\n")
+
+
+def edit_note(note_id: str, title: Optional[str] = None, content: Optional[str] = None,
+              tags: Optional[List[str]] = None, path: Optional[str] = None) -> bool:
+    """Edit an existing note.
+    
+    Args:
+        note_id (str): Note ID to edit.
+        title (Optional[str]): New title.
+        content (Optional[str]): New content.
+        tags (Optional[List[str]]): New tags.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        bool: True if updated, False if note not found.
+    """
+    notes = load_notes(path)
+    note = next((n for n in notes if n.id == note_id), None)
+    
+    if not note:
+        return False
+    
+    if title is not None:
+        note.title = title
+    if content is not None:
+        note.content = content
+    if tags is not None:
+        note.tags = tags
+    
+    note.updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    save_notes(notes, path)
+    
+    return True
+
+
+def link_note_to_note(source_id: str, target_id: str, path: Optional[str] = None) -> bool:
+    """Link one note to another.
+    
+    Args:
+        source_id (str): Source note ID.
+        target_id (str): Target note ID to link to.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        bool: True if linked, False if either note not found.
+    """
+    notes = load_notes(path)
+    source = next((n for n in notes if n.id == source_id), None)
+    target = next((n for n in notes if n.id == target_id), None)
+    
+    if not source or not target:
+        return False
+    
+    if target_id not in source.linked_notes:
+        source.linked_notes.append(target_id)
+        source.updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        save_notes(notes, path)
+    
+    return True
+
+
+def link_note_to_task(note_id: str, task_id: str, notes_path: Optional[str] = None,
+                      tasks_path: Optional[str] = None) -> bool:
+    """Link a note to a task.
+    
+    Args:
+        note_id (str): Note ID.
+        task_id (str): Task ID to link to.
+        notes_path (Optional[str]): Custom path to notes file.
+        tasks_path (Optional[str]): Custom path to tasks file.
+    
+    Returns:
+        bool: True if linked, False if note or task not found.
+    """
+    notes = load_notes(notes_path)
+    note = next((n for n in notes if n.id == note_id), None)
+    
+    if not note:
+        return False
+    
+    # Verify task exists
+    if not task_id_exists(task_id, tasks_path):
+        return False
+    
+    if task_id not in note.linked_tasks:
+        note.linked_tasks.append(task_id)
+        note.updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        save_notes(notes, notes_path)
+    
+    return True
+
+
+def delete_note(note_id: str, path: Optional[str] = None) -> bool:
+    """Delete a note.
+    
+    Args:
+        note_id (str): Note ID to delete.
+        path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        bool: True if deleted, False if not found.
+    """
+    notes = load_notes(path)
+    original_count = len(notes)
+    notes = [n for n in notes if n.id != note_id]
+    
+    if len(notes) < original_count:
+        save_notes(notes, path)
+        
+        # Remove references from other notes
+        for note in notes:
+            if note_id in note.linked_notes:
+                note.linked_notes.remove(note_id)
+        
+        save_notes(notes, path)
+        return True
+    
+    return False
+
+
+def pretty_print_notes(notes: List[Note]) -> None:
+    """Print notes in a readable format.
+    
+    Args:
+        notes (List[Note]): List of notes to print.
+    """
+    if not notes:
+        print("No notes found.")
+        return
+    
+    for note in notes:
+        tags_str = f" [{', '.join(note.tags)}]" if note.tags else ""
+        links_str = ""
+        if note.linked_notes:
+            links_str += f" →{len(note.linked_notes)} notes"
+        if note.linked_tasks:
+            links_str += f" →{len(note.linked_tasks)} tasks"
+        
+        preview = note.content[:80] + "..." if len(note.content) > 80 else note.content
+        preview = preview.replace("\n", " ")
+        
+        print(f"{note.id} | {note.title}{tags_str}{links_str}")
+        if preview:
+            print(f"  {preview}")
+
+
+def export_note_to_markdown(note_id: str, output_path: Optional[str] = None,
+                            notes_path: Optional[str] = None) -> bool:
+    """Export a note to a markdown file.
+    
+    Args:
+        note_id (str): Note ID to export.
+        output_path (Optional[str]): Output file path. If None, uses note title as filename.
+        notes_path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        bool: True if exported successfully, False if note not found.
+    """
+    notes = load_notes(notes_path)
+    note = next((n for n in notes if n.id == note_id), None)
+    
+    if not note:
+        return False
+    
+    # Generate output path if not provided
+    if output_path is None:
+        # Sanitize title for filename
+        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in note.title)
+        safe_title = safe_title.replace(' ', '_')
+        output_path = f"{safe_title}.md"
+    
+    # Build markdown content
+    md_content = f"# {note.title}\n\n"
+    
+    # Add metadata
+    md_content += f"**ID:** {note.id}  \n"
+    md_content += f"**Created:** {note.created_at}  \n"
+    md_content += f"**Updated:** {note.updated_at}  \n"
+    
+    if note.tags:
+        md_content += f"**Tags:** {', '.join(f'`{tag}`' for tag in note.tags)}  \n"
+    
+    md_content += "\n"
+    
+    # Add links section if there are any
+    if note.linked_notes or note.linked_tasks:
+        md_content += "## Links\n\n"
+        
+        if note.linked_notes:
+            md_content += "**Linked Notes:**\n"
+            for linked_id in note.linked_notes:
+                linked_note = next((n for n in notes if n.id == linked_id), None)
+                if linked_note:
+                    md_content += f"- [{linked_note.title}](#{linked_id}) (`{linked_id}`)\n"
+                else:
+                    md_content += f"- `{linked_id}` (not found)\n"
+            md_content += "\n"
+        
+        if note.linked_tasks:
+            md_content += "**Linked Tasks:**\n"
+            for task_id in note.linked_tasks:
+                md_content += f"- Task `{task_id}`\n"
+            md_content += "\n"
+    
+    # Add main content
+    md_content += "## Content\n\n"
+    md_content += note.content
+    
+    # Add separator
+    md_content += "\n\n---\n"
+    md_content += f"*Generated from note {note.id} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*\n"
+    
+    # Write to file
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(md_content)
+    
+    return True
+
+
+def export_all_notes_to_markdown(output_dir: str = "notes_export",
+                                 notes_path: Optional[str] = None) -> int:
+    """Export all notes to markdown files in a directory.
+    
+    Args:
+        output_dir (str): Directory to export notes to.
+        notes_path (Optional[str]): Custom path to notes file.
+    
+    Returns:
+        int: Number of notes exported.
+    """
+    notes = load_notes(notes_path)
+    
+    if not notes:
+        return 0
+    
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create an index file
+    index_content = "# Notes Index\n\n"
+    index_content += f"Generated on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+    index_content += f"Total notes: {len(notes)}\n\n"
+    
+    # Group by tags
+    tags_dict = {}
+    for note in notes:
+        for tag in note.tags:
+            if tag not in tags_dict:
+                tags_dict[tag] = []
+            tags_dict[tag].append(note)
+    
+    if tags_dict:
+        index_content += "## Notes by Tag\n\n"
+        for tag in sorted(tags_dict.keys()):
+            index_content += f"### {tag}\n\n"
+            for note in tags_dict[tag]:
+                safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in note.title)
+                safe_title = safe_title.replace(' ', '_')
+                index_content += f"- [{note.title}]({safe_title}.md) (`{note.id}`)\n"
+            index_content += "\n"
+    
+    index_content += "## All Notes\n\n"
+    
+    # Export each note
+    count = 0
+    for note in notes:
+        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in note.title)
+        safe_title = safe_title.replace(' ', '_')
+        file_path = output_path / f"{safe_title}.md"
+        
+        if export_note_to_markdown(note.id, str(file_path), notes_path):
+            count += 1
+            index_content += f"- [{note.title}]({safe_title}.md) - {note.created_at}\n"
+            if note.tags:
+                index_content += f"  - Tags: {', '.join(f'`{tag}`' for tag in note.tags)}\n"
+    
+    # Write index file
+    with open(output_path / "INDEX.md", 'w', encoding='utf-8') as f:
+        f.write(index_content)
+    
+    return count
+
+
 def mark_important(task_id: str, path: Optional[str] = None) -> bool:
     """Mark a task as important. Returns True if changed, False if not found."""
     tasks = load_tasks(path)
@@ -640,7 +1168,7 @@ def pretty_print(tasks: List[Task]) -> None:
         if t.links:
             print("    Linked tasks:")
             for lid in t.links:
-                print(f"      - [{lid}] view: python prototype_pkms.py show {lid}")
+                print(f"      - [{lid}] view: python -m final_project show {lid}")
         
         # Display subtask count and command if present
         if getattr(t, 'subtasks', None):
@@ -648,7 +1176,7 @@ def pretty_print(tasks: List[Task]) -> None:
             if subtask_count > 0:
                 print(
                     f"    {yellow}Subtasks:{reset} {subtask_count} subtask(s) - "
-                    f"run: python prototype_pkms.py show-subtasks {t.id}"
+                    f"run: python -m final_project show-subtasks {t.id}"
                 )
         
         print(f"    Created: {t.created_at}")
@@ -658,17 +1186,30 @@ def build_parser() -> argparse.ArgumentParser:
     """Build and return the argument parser for the CLI.
     
     Configures all available commands and their arguments, including:
-    - add: Create new tasks with optional metadata
-    - list: List tasks with filtering and sorting options
-    - search: Search by keyword
-    - show: Display a single task's details
-    - link: Create task relationships
-    - tags: List tag usage statistics
-    - search-tags: Find tasks by tag(s) with ANY/ALL matching
-    - important: List flagged tasks
-    - mark-important/unmark-important: Toggle importance flag
-    - add-subtask/show-subtasks: Manage task hierarchies
-    - delete: Remove tasks with subtask handling options
+    Task Management:
+      - add: Create new tasks with optional metadata
+      - list: List tasks with filtering and sorting options
+      - search: Search by keyword
+      - show: Display a single task's details
+      - link: Create task relationships
+      - tags: List tag usage statistics
+      - search-tags: Find tasks by tag(s) with ANY/ALL matching
+      - important: List flagged tasks
+      - mark-important/unmark-important: Toggle importance flag
+      - add-subtask/show-subtasks: Manage task hierarchies
+      - delete: Remove tasks with subtask handling options
+    AI Features:
+      - ai-chat: Interactive AI chat for summarization
+      - ai-summarize: Summarize existing tasks with AI
+    PKM (Personal Knowledge Management):
+      - note-create: Create new note documents
+      - note-list: List all notes
+      - note-search: Search notes by keyword
+      - note-show: Display full note details
+      - note-edit: Edit note title, content, or tags
+      - note-delete: Delete a note
+      - note-link-note: Link notes together
+      - note-link-task: Link notes to tasks
     
     Returns:
         Configured ArgumentParser instance.
@@ -731,11 +1272,62 @@ def build_parser() -> argparse.ArgumentParser:
     p_ai_summarize.add_argument("task_id", nargs="?", help="ID of specific task to summarize (optional, summarizes all if omitted)")
     p_ai_summarize.add_argument("--update", action="store_true", help="Update task notes with AI summary")
 
+    # PKM (Personal Knowledge Management) Commands
+    p_note_create = sub.add_parser("note-create", help="Create a new note")
+    p_note_create.add_argument("title", help="Note title")
+    p_note_create.add_argument("--content", help="Note content (markdown supported)")
+    p_note_create.add_argument("--tag", action="append", help="Add a tag (can use multiple times)")
+    p_note_create.add_argument("--id", dest="custom_id", help="Custom note ID")
+    p_note_create.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_list = sub.add_parser("note-list", help="List all notes")
+    p_note_list.add_argument("--tag", help="Filter by tag")
+    p_note_list.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_search = sub.add_parser("note-search", help="Search notes by keyword")
+    p_note_search.add_argument("query", help="Search query (searches title and content)")
+    p_note_search.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_show = sub.add_parser("note-show", help="Show full note details")
+    p_note_show.add_argument("note_id", help="ID of note to display")
+    p_note_show.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_edit = sub.add_parser("note-edit", help="Edit an existing note")
+    p_note_edit.add_argument("note_id", help="ID of note to edit")
+    p_note_edit.add_argument("--title", help="New title")
+    p_note_edit.add_argument("--content", help="New content")
+    p_note_edit.add_argument("--tag", action="append", help="Set tags (replaces existing)")
+    p_note_edit.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_delete = sub.add_parser("note-delete", help="Delete a note")
+    p_note_delete.add_argument("note_id", help="ID of note to delete")
+    p_note_delete.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_link_note = sub.add_parser("note-link-note", help="Link one note to another")
+    p_note_link_note.add_argument("source_id", help="Source note ID")
+    p_note_link_note.add_argument("target_id", help="Target note ID to link to")
+    p_note_link_note.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_note_link_task = sub.add_parser("note-link-task", help="Link a note to a task")
+    p_note_link_task.add_argument("note_id", help="Note ID")
+    p_note_link_task.add_argument("task_id", help="Task ID to link to")
+    p_note_link_task.add_argument("--notes-data", help="Path to notes JSON file")
+    p_note_link_task.add_argument("--data", dest="tasks_data", help="Path to tasks JSON file")
+
+    p_note_export = sub.add_parser("note-export", help="Export a note to markdown file")
+    p_note_export.add_argument("note_id", help="ID of note to export")
+    p_note_export.add_argument("--output", help="Output file path (default: <note_title>.md)")
+    p_note_export.add_argument("--notes-data", help="Path to notes JSON file")
+
+    p_notes_export_all = sub.add_parser("note-export-all", help="Export all notes to markdown files")
+    p_notes_export_all.add_argument("--output-dir", default="notes_export", help="Output directory (default: notes_export)")
+    p_notes_export_all.add_argument("--notes-data", help="Path to notes JSON file")
+
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    """Main entry point for the tasks3 CLI.
+    """Main entry point for the final_project CLI.
     
     Parses command-line arguments and dispatches to appropriate command handlers.
     
@@ -873,6 +1465,107 @@ def main(argv: Optional[List[str]] = None) -> int:
             update=args.update,
             path=data_path
         )
+
+    # PKM (Personal Knowledge Management) Commands
+    if args.cmd == "note-create":
+        notes_path = getattr(args, 'notes_data', None)
+        note = create_note(
+            title=args.title,
+            content=args.content or "",
+            tags=args.tag or [],
+            custom_id=args.custom_id,
+            path=notes_path
+        )
+        if note is None:
+            return 2
+        print(f"Created note {note.id}")
+        return 0
+
+    if args.cmd == "note-list":
+        notes_path = getattr(args, 'notes_data', None)
+        notes = list_notes(path=notes_path, tag=args.tag)
+        pretty_print_notes(notes)
+        return 0
+
+    if args.cmd == "note-search":
+        notes_path = getattr(args, 'notes_data', None)
+        notes = search_notes(args.query, path=notes_path)
+        pretty_print_notes(notes)
+        return 0
+
+    if args.cmd == "note-show":
+        notes_path = getattr(args, 'notes_data', None)
+        show_note(args.note_id, path=notes_path)
+        return 0
+
+    if args.cmd == "note-edit":
+        notes_path = getattr(args, 'notes_data', None)
+        ok = edit_note(
+            note_id=args.note_id,
+            title=args.title,
+            content=args.content,
+            tags=args.tag,
+            path=notes_path
+        )
+        if ok:
+            print(f"Updated note {args.note_id}")
+            return 0
+        else:
+            print(f"Note {args.note_id} not found")
+            return 2
+
+    if args.cmd == "note-delete":
+        notes_path = getattr(args, 'notes_data', None)
+        ok = delete_note(args.note_id, path=notes_path)
+        if ok:
+            print(f"Deleted note {args.note_id}")
+            return 0
+        else:
+            print(f"Note {args.note_id} not found")
+            return 2
+
+    if args.cmd == "note-link-note":
+        notes_path = getattr(args, 'notes_data', None)
+        ok = link_note_to_note(args.source_id, args.target_id, path=notes_path)
+        if ok:
+            print(f"Linked note {args.target_id} -> {args.source_id}")
+            return 0
+        else:
+            print("One or both note IDs not found")
+            return 2
+
+    if args.cmd == "note-link-task":
+        notes_path = getattr(args, 'notes_data', None)
+        tasks_path = getattr(args, 'tasks_data', None)
+        ok = link_note_to_task(args.note_id, args.task_id, notes_path, tasks_path)
+        if ok:
+            print(f"Linked task {args.task_id} to note {args.note_id}")
+            return 0
+        else:
+            print("Note or task not found")
+            return 2
+
+    if args.cmd == "note-export":
+        notes_path = getattr(args, 'notes_data', None)
+        output_path = getattr(args, 'output', None)
+        ok = export_note_to_markdown(args.note_id, output_path, notes_path)
+        if ok:
+            if output_path:
+                print(f"Exported note {args.note_id} to {output_path}")
+            else:
+                print(f"Exported note {args.note_id} to markdown file")
+            return 0
+        else:
+            print(f"Note {args.note_id} not found")
+            return 2
+
+    if args.cmd == "note-export-all":
+        notes_path = getattr(args, 'notes_data', None)
+        output_dir = args.output_dir
+        count = export_all_notes_to_markdown(output_dir, notes_path)
+        print(f"Exported {count} note(s) to {output_dir}/")
+        print(f"Index file created at {output_dir}/INDEX.md")
+        return 0
 
     parser.print_help()
     return 2
@@ -1016,10 +1709,11 @@ def openai_chat_loop() -> int:
     """Interactive AI chat loop for task description summarization.
     
     Prompts user for task descriptions and uses GPT-4o-mini to generate
-    concise summaries. Continues until user types 'quit' or sends EOF.
+    concise summaries. User can type 'quit' to return to the main menu,
+    which displays the command help page.
     
     Returns:
-        int: Exit code (0 for success, 1 for error)
+        int: Exit code (0 for success/quit, 1 for error)
     """
     # Import OpenAI only when this function is called to avoid import errors
     # when the module is imported for testing other functions
